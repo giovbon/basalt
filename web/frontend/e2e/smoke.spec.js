@@ -140,7 +140,7 @@ test('renders a markmap note beside its editable Markdown source', async ({ page
   const map = page.locator('.markmap-container .markmap-svg');
   await expect(map.locator('.markmap-node').filter({ hasText: 'Project' })).toHaveCount(1);
   await expect(map.locator('.markmap-node').filter({ hasText: 'Implement' })).toHaveCount(1);
-  await expect(map).toHaveCSS('--markmap-max-width', '400px');
+  await expect(map).not.toHaveCSS('--markmap-max-width', '400px');
   await expect(map.locator('img, script')).toHaveCount(0);
   await expect(page.locator('[data-testid="preview"] h1')).toHaveCount(0);
 
@@ -157,7 +157,7 @@ test('renders a markmap note beside its editable Markdown source', async ({ page
   await page.locator('[data-testid="rail-files"]').click();
   await page.locator('.note-item[data-path="Welcome.md"]').click();
   await editor.fill(source);
-  await expect(map).toHaveCSS('--markmap-max-width', '400px');
+  await expect(map).not.toHaveCSS('--markmap-max-width', '400px');
   const darkMapColor = await map.evaluate((svg) => getComputedStyle(svg).color);
   const darkPreviewColor = await page.locator('[data-testid="preview"]').evaluate((preview) => getComputedStyle(preview).color);
   expect(darkMapColor).toBe(darkPreviewColor);

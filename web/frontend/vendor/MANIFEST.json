@@ -75,7 +75,7 @@
       "version": "0.18.13",
       "license": "MIT and bundled dependency licenses",
       "hashes": {
-        "markmap.js": "92621332b8ca3a2c5787029511a23e7f1f05a18793c96a9f8a736a2784ca136f",
+        "markmap.js": "4d8202f032974c68828a763afebf179dee8d9138e7c3d269b0b59d4c3b057d2d",
         "markmap.js.LEGAL.txt": "240f3101c39c4f4403805902bd4f7e3434046ee56fca7a98fe4b7808e58fe4b6",
         "THIRD_PARTY_NOTICES.txt": "99b476aa759305997f4e83276e604549523db987ac2e035a0b66bc24af75eaf1"
       }

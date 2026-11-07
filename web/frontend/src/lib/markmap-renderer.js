@@ -10,7 +10,6 @@ export async function renderMarkmap(svg, markdown, instance) {
         autoFit: true,
         duration: 200,
         ...frontmatter?.markmap,
-        maxWidth: frontmatter?.markmap?.maxWidth ?? 400,
     });
     const markmap = instance || Markmap.create(svg, options, root);
 

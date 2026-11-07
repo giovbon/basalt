@@ -37,8 +37,6 @@ Para renderizar uma nota como mapa mental no painel de visualização, defina
 ```markdown
 ---
 note-type: markmap
-markmap:
-  maxWidth: 400
 ---
 # Projeto
 ## Planejamento
@@ -46,8 +44,14 @@ markmap:
 ```
 
 O conteúdo continua editável como Markdown; no modo dividido, o painel ao lado
-mostra o mapa mental atualizado durante a edição. `maxWidth: 400` é aplicado
-por padrão às caixas dos nós e pode ser alterado ou substituído no frontmatter.
+mostra o mapa mental atualizado durante a edição. Para limitar a largura das
+caixas dos nós, adicione manualmente ao frontmatter:
+
+```yaml
+markmap:
+  maxWidth: 400
+```
+
 As cores do mapa acompanham o tema ativo, inclusive nos temas claros.
 
 ### Desenvolvimento: alterando a interface
