@@ -38,6 +38,19 @@ export function createEditor() {
             const start = textarea.selectionStart;
             const end = textarea.selectionEnd;
 
+            if (!event.shiftKey && typeof EditorMarkdownContinue !== 'undefined') {
+                const listItem = EditorMarkdownContinue.tryTab(this.noteContent, start, end, event);
+                if (listItem.handled) {
+                    event.preventDefault();
+                    this.noteContent = listItem.text;
+                    this.$nextTick(() => {
+                        textarea.selectionStart = textarea.selectionEnd = listItem.cursor;
+                    });
+                    this.autoSave();
+                    return;
+                }
+            }
+
             if (event.shiftKey) {
                 // Always keep focus in the editor; without this a line that is
                 // already flush-left lets the browser move focus to the toolbar.

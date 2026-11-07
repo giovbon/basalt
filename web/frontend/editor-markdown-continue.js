@@ -126,8 +126,32 @@
         return { handled: true, text: newText, cursor: lineEnd + insert.length };
     }
 
+    function tryTab(text, selStart, selEnd, event) {
+        if (event.key !== 'Tab' || event.defaultPrevented || event.isComposing) return { handled: false };
+        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return { handled: false };
+        if (selStart !== selEnd || cursorInMarkdownCodeFence(text, selStart)) return { handled: false };
+
+        const { lineStart, lineEnd, line } = getLineBounds(text, selStart);
+        const isLineEnd = selStart === lineEnd
+            || (lineEnd > lineStart && line.charAt(line.length - 1) === '\r' && selStart === lineEnd - 1);
+        if (!isLineEnd) return { handled: false };
+
+        const quoteMatch = line.match(/^(\s*)((?:>\s*)+)/);
+        const listContent = quoteMatch ? line.slice(quoteMatch[0].length) : line;
+        if (!/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[xX ]\]\s*)?$/.test(listContent)) {
+            return { handled: false };
+        }
+
+        return {
+            handled: true,
+            text: text.slice(0, lineStart) + '\t' + text.slice(lineStart),
+            cursor: selStart + 1,
+        };
+    }
+
     global.EditorMarkdownContinue = {
         tryEnter,
+        tryTab,
         parseContinuationContext,
         getLineBounds,
         cursorInMarkdownCodeFence,

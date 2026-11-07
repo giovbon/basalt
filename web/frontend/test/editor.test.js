@@ -12,6 +12,7 @@ import {
     applyMarkdownWrap,
 } from '../src/lib/editor.js';
 import { createEditor } from '../src/app/editor.js';
+import '../editor-markdown-continue.js';
 
 test('indent removal is one tab or up to four spaces', () => {
     assert.equal(EDITOR_TAB_OUTDENT_MAX_SPACES, 4);
@@ -165,6 +166,57 @@ function makeEditorComponent(noteContent, selectionStart, selectionEnd) {
         restore() { globalThis.document = previousDocument; },
     };
 }
+
+test('Tab indents an empty Markdown list item as a nested item', () => {
+    const text = '# JS\n- reduce\n- ';
+    const result = globalThis.EditorMarkdownContinue.tryTab(text, text.length, text.length, {
+        key: 'Tab',
+        defaultPrevented: false,
+        isComposing: false,
+        shiftKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        altKey: false,
+    });
+
+    assert.deepEqual(result, {
+        handled: true,
+        text: '# JS\n- reduce\n\t- ',
+        cursor: text.length + 1,
+    });
+});
+
+test('Tab keeps its regular behavior outside an empty list item', () => {
+    const text = '```md\n- \n```';
+    const result = globalThis.EditorMarkdownContinue.tryTab(text, 9, 9, {
+        key: 'Tab',
+        defaultPrevented: false,
+        isComposing: false,
+        shiftKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        altKey: false,
+    });
+
+    assert.deepEqual(result, { handled: false });
+});
+
+test('Tab handler applies the nested list edit and moves the caret', () => {
+    const text = '# JS\n- reduce\n- ';
+    const ctx = makeEditorComponent(text, text.length, text.length);
+    try {
+        ctx.component.tabInsertsTab = true;
+        const event = ctx.keyEvent('Tab');
+
+        ctx.component.handleTabKey(event);
+
+        assert.equal(event.defaultPrevented, true);
+        assert.equal(ctx.component.noteContent, '# JS\n- reduce\n\t- ');
+        assert.deepEqual([ctx.editor.selectionStart, ctx.editor.selectionEnd], [text.length + 1, text.length + 1]);
+    } finally {
+        ctx.restore();
+    }
+});
 
 test('a dead-key wrap collapses the caret and consumes the commit keystroke', () => {
     const ctx = makeEditorComponent('hello', 0, 5);

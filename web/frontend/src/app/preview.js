@@ -10,6 +10,8 @@ import { isMarkmapNote } from '../lib/markmap-note.js';
 import { scanTaskLines, toggleTaskAt, setAllTasks } from '../lib/tasks.js';
 import { typeIconSvg } from '../lib/file-icons.js';
 
+const MARKMAP_RENDER_DEBOUNCE_MS = 500;
+
 export function createPreview() {
     return {
         
@@ -384,11 +386,7 @@ export function createPreview() {
         // Rendered markdown HTML for the preview pane. This is a cached value
         // updated by renderPreview(); the getter just returns it (or a placeholder).
         get renderedMarkdown() {
-            if (!this.noteContent) return '<p style="color: var(--text-tertiary);">Nothing to preview yet...</p>';
-            if (isMarkmapNote(this.noteContent)) {
-                return '<div class="markmap-container"><svg class="markmap-svg" aria-label="Mapa mental"></svg></div>';
-            }
-            return this._cachedRenderedHTML || '<p style="color: var(--text-tertiary);">Rendering preview...</p>';
+            return this._cachedRenderedHTML || '<p style="color: var(--text-tertiary);">Nothing to preview yet...</p>';
         },
 
         // Synchronous markdown rendering + DOM post-processing setup.
@@ -441,7 +439,10 @@ export function createPreview() {
         schedulePreviewPostProcessing() {
             if (this._markmapDebounceTimeout) clearTimeout(this._markmapDebounceTimeout);
             if (isMarkmapNote(this.noteContent)) {
-                this._markmapDebounceTimeout = setTimeout(() => this.renderMarkmap(), 200);
+                this._markmapDebounceTimeout = setTimeout(
+                    () => this.renderMarkmap(),
+                    MARKMAP_RENDER_DEBOUNCE_MS
+                );
                 return;
             }
 
