@@ -253,6 +253,13 @@ export function createState() {
         
         // Mermaid state cache
         lastMermaidTheme: null,
+
+        // Lazily loaded Markmap module and rendered map instance
+        _markmapLoadPromise: null,
+        _markmapInstance: null,
+        _markmapSvg: null,
+        _markmapDebounceTimeout: null,
+        _markmapRenderVersion: 0,
         
         // Media viewer state
         currentMedia: '',  // Path to current media file (kept as 'currentMedia' for compatibility)

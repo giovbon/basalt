@@ -134,6 +134,7 @@ export function createBootstrap() {
                 this.$nextTick(() => {
                     requestAnimationFrame(() => {
                         this._restoreNoteScroll();
+                        if (newValue !== 'edit') this.fitMarkmap();
                         // One more frame: lets any scroll event emitted by the
                         // layout settle pass through while still suppressed.
                         requestAnimationFrame(() => {
@@ -142,6 +143,8 @@ export function createBootstrap() {
                     });
                 });
             });
+
+            this.$watch('currentTheme', () => this.updateMarkmapTheme(this._markmapSvg));
             
             // Watch for changes in note content to re-apply search highlights
             this.$watch('noteContent', () => {

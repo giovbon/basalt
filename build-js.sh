@@ -19,4 +19,16 @@ npx --yes esbuild@0.24.2 src/main.js \
   --banner:js='/* GENERATED FILE - edit web/frontend/src/ and run ./build-js.sh */' \
   --outfile=app.js
 
+mkdir -p vendor/markmap
+npx --yes esbuild@0.24.2 src/lib/markmap-renderer.js \
+  --bundle \
+  --format=esm \
+  --target=es2020 \
+  --minify \
+  --legal-comments=linked \
+  --metafile=vendor/markmap/markmap-metafile.json \
+  --outfile=vendor/markmap/markmap.js
+node scripts/generate-markmap-licenses.js vendor/markmap/markmap-metafile.json
+rm vendor/markmap/markmap-metafile.json
+
 echo "OK: web/frontend/app.js ($(wc -c < app.js) bytes, source map $(wc -c < app.js.map) bytes)"

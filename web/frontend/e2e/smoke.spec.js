@@ -128,3 +128,18 @@ test('attaches a media file from the editor toolbar', async ({ page }) => {
 
   await expect(page.locator('#note-editor')).toHaveValue(/e2e-attach/, { timeout: 10_000 });
 });
+
+test('renders a markmap note beside its editable Markdown source', async ({ page }) => {
+  await page.locator('.note-item[data-path="Welcome.md"]').click();
+
+  const editor = page.locator('#note-editor');
+  const source = '---\nnote-type: markmap\n---\n# Project\n\n## Plan\n\n- Implement\n- Test\n- <img src=x onerror=alert(1)>';
+  await editor.fill(source);
+
+  await expect(editor).toHaveValue(source);
+  const map = page.locator('.markmap-container .markmap-svg');
+  await expect(map.locator('.markmap-node').filter({ hasText: 'Project' })).toHaveCount(1);
+  await expect(map.locator('.markmap-node').filter({ hasText: 'Implement' })).toHaveCount(1);
+  await expect(map.locator('img, script')).toHaveCount(0);
+  await expect(page.locator('[data-testid="preview"] h1')).toHaveCount(0);
+});

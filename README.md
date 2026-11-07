@@ -29,15 +29,35 @@ Para rodar em outra porta:
 PORT=8080 ./run.sh
 ```
 
+### Notas de mapa mental
+
+Para renderizar uma nota como mapa mental no painel de visualização, defina
+`note-type: markmap` no frontmatter YAML:
+
+```markdown
+---
+note-type: markmap
+---
+# Projeto
+## Planejamento
+- Próxima etapa
+```
+
+O conteúdo continua editável como Markdown; no modo dividido, o painel ao lado
+mostra o mapa mental atualizado durante a edição.
+
 ### Desenvolvimento: alterando a interface
 
 O JavaScript é modular: as fontes ficam em `web/frontend/src/` (ES modules) e
-são empacotadas em `web/frontend/app.js` pelo esbuild. **Não edite `app.js`** —
-ele é gerado. Depois de mexer em `src/`:
+são empacotadas em `web/frontend/app.js` pelo esbuild. O build também gera o
+bundle local do Markmap, carregado somente por notas desse tipo. **Não edite
+os arquivos gerados** — depois de instalar as dependências frontend e mexer em
+`src/`:
 
 ```bash
-./build-js.sh        # requer Node.js 26+/npm; regenera app.js + app.js.map
-node --test          # a partir de web/frontend/: testes dos módulos puros
+(cd web/frontend && npm ci)
+./build-js.sh        # requer Node.js 26+/npm; regenera os bundles frontend
+(cd web/frontend && npm test)
 ```
 
 O HTML também é modular: `web/frontend/index.html` é só o esqueleto da página

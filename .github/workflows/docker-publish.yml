@@ -35,13 +35,15 @@ jobs:
           node-version: '26'
 
       - name: Frontend tests
-        run: npm test --prefix web/frontend
+        run: |
+          npm ci --prefix web/frontend
+          npm test --prefix web/frontend
 
       - name: Check generated frontend artifacts
         run: |
           bash build-js.sh
           bash build-tailwind.sh
-          if ! git diff --exit-code -- web/frontend/app.js web/frontend/app.js.map web/frontend/tailwind.css; then
+          if ! git diff --exit-code -- web/frontend/app.js web/frontend/app.js.map web/frontend/vendor/MANIFEST.json web/frontend/vendor/markmap/markmap.js web/frontend/vendor/markmap/markmap.js.LEGAL.txt web/frontend/vendor/markmap/THIRD_PARTY_NOTICES.txt web/frontend/tailwind.css; then
             echo "::error::Generated frontend artifacts are stale. Run ./build-js.sh and ./build-tailwind.sh and commit the result."
             exit 1
           fi

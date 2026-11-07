@@ -12,6 +12,7 @@ licensed; these notices cover the vendored files only.
 | highlight.js | 11.9.0 | BSD-3-Clause | `highlight.js/LICENSE` |
 | marked | 12.0.2 | MIT | `marked/LICENSE` |
 | mathjax | 3.2.2 | Apache-2.0 | `mathjax/LICENSE` |
+| markmap | 0.18.13 | MIT and bundled dependency licences | `markmap/THIRD_PARTY_NOTICES.txt`, `markmap/markmap.js.LEGAL.txt` |
 | mermaid | 11.12.2 | MIT | `mermaid/LICENSE` |
 | qrcode-generator | 1.4.4 | MIT | `qrcode-generator/LICENSE` |
 | tailwindcss | 3.4.17 | MIT | `tailwindcss/LICENSE` |

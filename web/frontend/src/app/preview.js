@@ -6,6 +6,7 @@
 import * as api from '../core/api.js';
 import { encodeVaultPath } from '../core/utils.js';
 import { renderMarkdownSync } from '../lib/markdown-render.js';
+import { getFrontmatterAndBody, isMarkmapNote } from '../lib/markmap-note.js';
 import { scanTaskLines, toggleTaskAt, setAllTasks } from '../lib/tasks.js';
 import { typeIconSvg } from '../lib/file-icons.js';
 
@@ -384,6 +385,9 @@ export function createPreview() {
         // updated by renderPreview(); the getter just returns it (or a placeholder).
         get renderedMarkdown() {
             if (!this.noteContent) return '<p style="color: var(--text-tertiary);">Nothing to preview yet...</p>';
+            if (isMarkmapNote(this.noteContent)) {
+                return '<div class="markmap-container"><svg class="markmap-svg" aria-label="Mapa mental"></svg></div>';
+            }
             return this._cachedRenderedHTML || '<p style="color: var(--text-tertiary);">Rendering preview...</p>';
         },
 
@@ -391,9 +395,20 @@ export function createPreview() {
         // Call this when noteContent or currentNote changes.
         renderPreview() {
             if (!this.noteContent) {
+                this.clearMarkmap();
                 this._cachedRenderedHTML = '<p style="color: var(--text-tertiary);">Nothing to preview yet...</p>';
                 return this._cachedRenderedHTML;
             }
+
+            if (isMarkmapNote(this.noteContent)) {
+                this._cachedRenderedHTML = '<div class="markmap-container"><svg class="markmap-svg" aria-label="Mapa mental"></svg></div>';
+                this._lastRenderedContent = this.noteContent;
+                this._lastRenderedNote = this.currentNote;
+                this.schedulePreviewPostProcessing();
+                return this._cachedRenderedHTML;
+            }
+
+            this.clearMarkmap();
 
             // Build the synchronous HTML using the pure renderer
             const html = renderMarkdownSync({
@@ -424,6 +439,12 @@ export function createPreview() {
         // Schedules the async DOM work that must run after the HTML is in the DOM.
         // Separate from renderPreview() so it can be called independently if needed.
         schedulePreviewPostProcessing() {
+            if (this._markmapDebounceTimeout) clearTimeout(this._markmapDebounceTimeout);
+            if (isMarkmapNote(this.noteContent)) {
+                this._markmapDebounceTimeout = setTimeout(() => this.renderMarkmap(), 200);
+                return;
+            }
+
             // Debounced MathJax rendering (avoid re-running on every keystroke)
             if (this._mathDebounceTimeout) clearTimeout(this._mathDebounceTimeout);
             this._mathDebounceTimeout = setTimeout(() => this.typesetMath(), 300);
@@ -456,6 +477,70 @@ export function createPreview() {
                     });
                 }
             }, 0);
+        },
+
+        loadMarkmap() {
+            if (!this._markmapLoadPromise) {
+                this._markmapLoadPromise = import('/static/vendor/markmap/markmap.js')
+                    .catch((error) => {
+                        console.error('Markmap failed to load:', error);
+                        this._markmapLoadPromise = null;
+                        throw error;
+                    });
+            }
+            return this._markmapLoadPromise;
+        },
+
+        clearMarkmap() {
+            this._markmapRenderVersion++;
+            if (this._markmapDebounceTimeout) clearTimeout(this._markmapDebounceTimeout);
+            this._markmapInstance?.destroy();
+            this._markmapInstance = null;
+            this._markmapSvg = null;
+        },
+
+        fitMarkmap() {
+            if (!this._markmapInstance || !this._markmapSvg?.isConnected) return;
+            this.updateMarkmapTheme(this._markmapSvg);
+            this._markmapInstance.fit().catch((error) => {
+                console.error('Markmap resize failed:', error);
+            });
+        },
+
+        updateMarkmapTheme(svg) {
+            if (!svg?.isConnected) return;
+            const container = svg.closest('.markmap-container');
+            if (container) container.classList.toggle('markmap-dark', this.getThemeType() === 'dark');
+        },
+
+        async renderMarkmap() {
+            const previewEl = this._domCache.previewContent || document.querySelector('.markdown-preview');
+            const svg = previewEl && previewEl.querySelector('.markmap-svg');
+            if (!svg || !isMarkmapNote(this.noteContent)) return;
+
+            const content = this.noteContent;
+            const renderVersion = ++this._markmapRenderVersion;
+            const { body } = getFrontmatterAndBody(content);
+            try {
+                const { renderMarkmap } = await this.loadMarkmap();
+                if (!svg.isConnected || renderVersion !== this._markmapRenderVersion || this.noteContent !== content) return;
+                this.updateMarkmapTheme(svg);
+
+                if (this._markmapSvg !== svg) {
+                    this._markmapInstance?.destroy();
+                    this._markmapInstance = null;
+                    this._markmapSvg = svg;
+                }
+                this._markmapInstance = await renderMarkmap(svg, body, this._markmapInstance);
+            } catch (error) {
+                console.error('Markmap rendering failed:', error);
+                if (svg.isConnected && renderVersion === this._markmapRenderVersion && this.noteContent === content) {
+                    const message = document.createElement('p');
+                    message.className = 'markmap-error';
+                    message.textContent = `Não foi possível renderizar o mapa mental: ${error.message}`;
+                    svg.replaceWith(message);
+                }
+            }
         },
         
         // Add copy button to code block

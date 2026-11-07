@@ -1,0 +1,4 @@
+Bundled license information:
+
+markmap-common/dist/index.mjs:
+  /*! @gera2ld/jsx-dom v2.2.2 | ISC License */

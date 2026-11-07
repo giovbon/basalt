@@ -7,11 +7,13 @@
     "node": ">=26"
   },
   "scripts": {
-    "build": "npx --yes esbuild@0.24.2 src/main.js --bundle --format=iife --target=es2020 --minify --sourcemap --legal-comments=none --banner:js='/* GENERATED FILE - edit web/frontend/src/ and run ./build-js.sh */' --outfile=app.js",
+    "build": "bash ../../build-js.sh",
     "test": "node --test",
     "test:e2e": "playwright test"
   },
   "devDependencies": {
-    "@playwright/test": "1.63.0"
+    "@playwright/test": "1.63.0",
+    "markmap-lib": "0.18.13",
+    "markmap-view": "0.18.13"
   }
 }

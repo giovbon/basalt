@@ -70,6 +70,15 @@
       "hashes": {
         "tarball": "c4ab1840638b1735135090c667382e89cc353b46b56761514a3d0a8a80963832"
       }
+    },
+    "markmap": {
+      "version": "0.18.13",
+      "license": "MIT and bundled dependency licenses",
+      "hashes": {
+        "markmap.js": "d4bf06ccd6d8e7a0f1fd7ecd4f5445e3fb4cc0fabf18a89a6e85308a7fd4e533",
+        "markmap.js.LEGAL.txt": "240f3101c39c4f4403805902bd4f7e3434046ee56fca7a98fe4b7808e58fe4b6",
+        "THIRD_PARTY_NOTICES.txt": "99b476aa759305997f4e83276e604549523db987ac2e035a0b66bc24af75eaf1"
+      }
     }
   }
 }

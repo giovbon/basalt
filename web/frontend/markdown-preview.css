@@ -22,6 +22,27 @@
     margin-right: auto;
 }
 
+.markdown-preview.readable-width > .markmap-container {
+    max-width: none;
+}
+
+.markmap-container {
+    width: 100%;
+    height: calc(100vh - 180px);
+    min-height: 400px;
+}
+
+.markmap-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.markmap-error {
+    color: var(--error);
+    padding: 1rem;
+}
+
 /* Remove top margin from first element */
 .markdown-preview > *:first-child {
     margin-top: 0 !important;
