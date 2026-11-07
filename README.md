@@ -64,6 +64,17 @@ os arquivos gerados** — depois de instalar as dependências frontend e mexer e
 (cd web/frontend && npm test)
 ```
 
+Para medir listagem e busca em vaults de 100, 1.000 e 10.000 notas:
+
+```bash
+go test ./internal/vault -run '^$' -bench 'BenchmarkVault' -benchmem
+```
+
+Os benchmarks comparam snapshot quente, varredura do filesystem com índice
+aquecido, índice frio e busca com cache de texto quente/frio. Use `-count=5`
+para comparar mudanças e rode na mesma máquina e no mesmo filesystem; o
+resultado varia conforme o disco e o hardware.
+
 O HTML também é modular: `web/frontend/index.html` é só o esqueleto da página
 (`<!DOCTYPE>`, `<body>` e os `<!-- @include ... -->`). Os blocos ficam em
 `web/frontend/partials/` (head/styles, sidebar com um arquivo por painel, main
