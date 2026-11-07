@@ -38,6 +38,14 @@
     height: 100%;
 }
 
+.markdown-preview .markmap-container .markmap {
+    color: var(--text-primary);
+    --markmap-text-color: var(--text-primary);
+    --markmap-circle-open-bg: var(--bg-primary);
+    --markmap-code-bg: var(--bg-tertiary);
+    --markmap-code-color: var(--text-primary);
+}
+
 .markmap-error {
     color: var(--error);
     padding: 1rem;

@@ -1,17 +1,23 @@
 import { Transformer } from 'markmap-lib';
-import { Markmap } from 'markmap-view';
+import { deriveOptions, Markmap } from 'markmap-view';
 
 const transformer = new Transformer();
 transformer.md.set({ html: false });
 
 export async function renderMarkmap(svg, markdown, instance) {
-    const { root } = transformer.transform(markdown);
-    const markmap = instance || Markmap.create(svg, {
+    const { root, frontmatter } = transformer.transform(markdown);
+    const options = deriveOptions({
         autoFit: true,
         duration: 200,
-    }, root);
+        ...frontmatter?.markmap,
+        maxWidth: frontmatter?.markmap?.maxWidth ?? 400,
+    });
+    const markmap = instance || Markmap.create(svg, options, root);
 
-    if (instance) await markmap.setData(root);
+    if (instance) {
+        markmap.setOptions(options);
+        await markmap.setData(root);
+    }
     await markmap.fit();
     return markmap;
 }

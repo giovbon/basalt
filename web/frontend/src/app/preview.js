@@ -6,7 +6,7 @@
 import * as api from '../core/api.js';
 import { encodeVaultPath } from '../core/utils.js';
 import { renderMarkdownSync } from '../lib/markdown-render.js';
-import { getFrontmatterAndBody, isMarkmapNote } from '../lib/markmap-note.js';
+import { isMarkmapNote } from '../lib/markmap-note.js';
 import { scanTaskLines, toggleTaskAt, setAllTasks } from '../lib/tasks.js';
 import { typeIconSvg } from '../lib/file-icons.js';
 
@@ -520,7 +520,6 @@ export function createPreview() {
 
             const content = this.noteContent;
             const renderVersion = ++this._markmapRenderVersion;
-            const { body } = getFrontmatterAndBody(content);
             try {
                 const { renderMarkmap } = await this.loadMarkmap();
                 if (!svg.isConnected || renderVersion !== this._markmapRenderVersion || this.noteContent !== content) return;
@@ -531,7 +530,7 @@ export function createPreview() {
                     this._markmapInstance = null;
                     this._markmapSvg = svg;
                 }
-                this._markmapInstance = await renderMarkmap(svg, body, this._markmapInstance);
+                this._markmapInstance = await renderMarkmap(svg, content, this._markmapInstance);
             } catch (error) {
                 console.error('Markmap rendering failed:', error);
                 if (svg.isConnected && renderVersion === this._markmapRenderVersion && this.noteContent === content) {
