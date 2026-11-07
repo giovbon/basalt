@@ -19,17 +19,34 @@ export function createPreview() {
         highlightMarkdown(text) {
             if (!text) return '';
             
-            // Escape HTML first
-            let html = this.escapeHtml(text);
-            
             // Store code blocks and inline code with placeholders to protect from other patterns
             const codePlaceholders = [];
             
-            // Code blocks FIRST - protect them before anything else
-            html = html.replace(/(```[\s\S]*?```)/g, (match) => {
-                codePlaceholders.push('<span class="md-codeblock">' + match + '</span>');
-                return `\x00CODE${codePlaceholders.length - 1}\x00`;
-            });
+            // Highlight fenced code before escaping surrounding Markdown. The
+            // overlay must retain the textarea's exact visible text so token
+            // colors never shift the caret or selection.
+            const highlighter = globalThis.hljs;
+            const highlightedText = text.replace(
+                /(^|\n)([ \t]{0,3})(`{3,})([^\n]*)\n([\s\S]*?)(?:\n([ \t]{0,3})(`{3,})[ \t]*(?=\n|$)|$)/g,
+                (match, lineStart, indent, fence, info, code, closingIndent = '', closingFence = '') => {
+                    const language = info.trim().split(/\s+/, 1)[0].toLowerCase();
+                    const canHighlight = language
+                        && highlighter
+                        && highlighter.getLanguage(language);
+                    const codeHtml = canHighlight
+                        ? highlighter.highlight(code, { language, ignoreIllegals: true }).value
+                        : this.escapeHtml(code);
+                    const className = canHighlight ? 'md-codeblock hljs' : 'md-codeblock';
+                    const block = this.escapeHtml(`${indent}${fence}${info}\n`)
+                        + codeHtml
+                        + (closingFence ? `\n${this.escapeHtml(`${closingIndent}${closingFence}`)}` : '');
+                    codePlaceholders.push(`<span class="${className}">${block}</span>`);
+                    return `${lineStart}\x00CODE${codePlaceholders.length - 1}\x00`;
+                }
+            );
+
+            // Escape HTML after code blocks are safely protected.
+            let html = this.escapeHtml(highlightedText);
             
             // Frontmatter (must be at VERY start of document, not any line)
             if (html.startsWith('---\n')) {

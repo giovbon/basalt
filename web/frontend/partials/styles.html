@@ -323,6 +323,10 @@
         .syntax-overlay .md-wikilink  { color: var(--link-internal, var(--accent-primary)); }
         .syntax-overlay .md-frontmatter { color: var(--text-tertiary); }
         .syntax-overlay .md-codeblock { color: var(--text-secondary); background: var(--bg-tertiary); }
+        .syntax-overlay .md-codeblock.hljs {
+            color: var(--text-primary);
+            background: transparent;
+        }
         
         /* Link drop zone cursor */
         .editor-textarea.link-drop-target {
