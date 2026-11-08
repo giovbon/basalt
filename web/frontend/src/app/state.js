@@ -17,6 +17,17 @@ export function createState() {
         autosaveDelayMs: CONFIG.AUTOSAVE_DELAY,  // hydrated from /api/config in loadConfig()
         defaultTheme: CONFIG.DEFAULT_THEME,      // hydrated from /api/config in loadConfig()
         uploadMaxNoteMb: CONFIG.UPLOAD_MAX_NOTE_MB, // hydrated from /api/config in loadConfig()
+        ntfyConfig: {
+            enabled: false,
+            serverUrl: 'https://ntfy.sh',
+            topic: '',
+            captureDir: 'Captura',
+            username: '',
+            passwordConfigured: false,
+            password: '',
+            clearPassword: false,
+            saving: false,
+        },
         notes: [],
 
         // True while /api/notes is in flight. Drives the "Loading your vault…"

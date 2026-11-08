@@ -367,8 +367,46 @@ export function createBootstrap() {
                 if (Number.isFinite(config.uploadMaxNoteMb) && config.uploadMaxNoteMb > 0) {
                     this.uploadMaxNoteMb = config.uploadMaxNoteMb;
                 }
+                if (config.ntfy && typeof config.ntfy === 'object') {
+                    this.ntfyConfig = {
+                        ...this.ntfyConfig,
+                        enabled: config.ntfy.enabled === true,
+                        serverUrl: config.ntfy.serverUrl || 'https://ntfy.sh',
+                        topic: config.ntfy.topic || '',
+                        captureDir: config.ntfy.captureDir || 'Captura',
+                        username: config.ntfy.username || '',
+                        passwordConfigured: config.ntfy.passwordConfigured === true,
+                        password: '',
+                        clearPassword: false,
+                    };
+                }
             } catch (error) {
                 console.error('Failed to load config:', error);
+            }
+        },
+
+        async saveNtfyConfig() {
+            if (this.ntfyConfig.saving) return;
+            this.ntfyConfig.saving = true;
+            try {
+                const result = await api.sendJSON('/api/ntfy/config', 'POST', {
+                    enabled: this.ntfyConfig.enabled,
+                    serverUrl: this.ntfyConfig.serverUrl,
+                    topic: this.ntfyConfig.topic,
+                    username: this.ntfyConfig.username,
+                    password: this.ntfyConfig.password,
+                    clearPassword: this.ntfyConfig.clearPassword,
+                    captureDir: this.ntfyConfig.captureDir,
+                });
+                this.ntfyConfig.passwordConfigured = result.passwordConfigured;
+                this.ntfyConfig.password = '';
+                this.ntfyConfig.clearPassword = false;
+                this.ntfyConfig.username = result.username;
+                this.toast(this.t('settings.ntfy_saved'), { type: 'success' });
+            } catch (error) {
+                this.toast(error.detail || error.message || this.t('settings.ntfy_save_failed'), { type: 'error' });
+            } finally {
+                this.ntfyConfig.saving = false;
             }
         },
         

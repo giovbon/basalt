@@ -17,7 +17,7 @@ type Server struct {
 	handler http.Handler
 }
 
-func NewServer(cfg *config.Config, v *vault.Vault, sess *session.Manager, assetsFS fs.FS) *Server {
+func NewServer(cfg *config.Config, v *vault.Vault, sess *session.Manager, assetsFS fs.FS, ntfyUpdater ...func(config.NtfyConfig) error) *Server {
 	mux := http.NewServeMux()
 
 	authH := NewAuthHandler(cfg, sess, assetsFS)
@@ -25,7 +25,7 @@ func NewServer(cfg *config.Config, v *vault.Vault, sess *session.Manager, assets
 	foldersH := NewFoldersHandler(cfg, v)
 	mediaH := NewMediaHandler(cfg, v)
 	tagsH := NewTagsSearchHandler(cfg, v)
-	sysH := NewSystemHandler(cfg, v, assetsFS)
+	sysH := NewSystemHandler(cfg, v, assetsFS, ntfyUpdater...)
 	staticH := NewStaticHandler(cfg, assetsFS)
 
 	// Auth & Page routes
@@ -46,6 +46,7 @@ func NewServer(cfg *config.Config, v *vault.Vault, sess *session.Manager, assets
 	mux.HandleFunc("GET /health", sysH.GetHealth)
 	mux.HandleFunc("GET /api/health", sysH.GetHealth)
 	mux.HandleFunc("GET /api/config", sysH.GetConfig)
+	mux.HandleFunc("POST /api/ntfy/config", sysH.UpdateNtfyConfig)
 	mux.HandleFunc("GET /api/stats", sysH.GetStats)
 	mux.HandleFunc("GET /api/index/stats", sysH.GetStats)
 	mux.HandleFunc("GET /api/graph", sysH.GetGraph)

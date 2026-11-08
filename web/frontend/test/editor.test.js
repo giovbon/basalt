@@ -141,6 +141,8 @@ function makeEditorComponent(noteContent, selectionStart, selectionEnd) {
     const component = Object.assign(createEditor(), {
         noteContent,
         autoSave() {},
+        syntaxHighlightUpdates: 0,
+        updateSyntaxHighlight() { this.syntaxHighlightUpdates++; },
         $nextTick(callback) { callback(); },
         wlOnKeydown() {},
     });
@@ -213,6 +215,23 @@ test('Tab handler applies the nested list edit and moves the caret', () => {
         assert.equal(event.defaultPrevented, true);
         assert.equal(ctx.component.noteContent, '# JS\n- reduce\n\t- ');
         assert.deepEqual([ctx.editor.selectionStart, ctx.editor.selectionEnd], [text.length + 1, text.length + 1]);
+    } finally {
+        ctx.restore();
+    }
+});
+
+test('Shift+Tab outdents and refreshes the syntax highlight overlay', () => {
+    const text = '    ```bash\n    npm install\n    ```';
+    const ctx = makeEditorComponent(text, 0, text.length);
+    try {
+        ctx.component.tabInsertsTab = true;
+        const event = ctx.keyEvent('Tab', { shiftKey: true });
+
+        ctx.component.handleTabKey(event);
+
+        assert.equal(event.defaultPrevented, true);
+        assert.equal(ctx.component.noteContent, '```bash\nnpm install\n```');
+        assert.equal(ctx.component.syntaxHighlightUpdates, 1);
     } finally {
         ctx.restore();
     }

@@ -47,6 +47,7 @@ export function createEditor() {
                         textarea.selectionStart = textarea.selectionEnd = listItem.cursor;
                     });
                     this.autoSave();
+                    this.updateSyntaxHighlight();
                     return;
                 }
             }
@@ -63,6 +64,7 @@ export function createEditor() {
                     textarea.selectionEnd = result.selEnd;
                 });
                 this.autoSave();
+                this.updateSyntaxHighlight();
                 return;
             }
 
@@ -78,6 +80,7 @@ export function createEditor() {
                     textarea.selectionEnd = multiline.selEnd;
                 });
                 this.autoSave();
+                this.updateSyntaxHighlight();
                 return;
             }
 
@@ -86,6 +89,7 @@ export function createEditor() {
                 textarea.selectionStart = textarea.selectionEnd = start + 1;
             });
             this.autoSave();
+            this.updateSyntaxHighlight();
         },
 
         // Single keydown entry point: wikilink autocomplete gets first refusal,
@@ -180,6 +184,7 @@ export function createEditor() {
                 editor.selectionStart = editor.selectionEnd = start + text.length;
             });
             this.autoSave();
+            this.updateSyntaxHighlight();
         },
 
         /**
@@ -277,7 +282,8 @@ export function createEditor() {
             // Apply previous state
             this.isUndoRedo = true;
             this.noteContent = previousState.content;
-            
+            this.updateSyntaxHighlight();
+
             // Restore cursor position from the state we're going back to
             this.$nextTick(() => {
                 this.saveNote();
@@ -312,7 +318,8 @@ export function createEditor() {
             // Apply next state
             this.isUndoRedo = true;
             this.noteContent = nextState.content;
-            
+            this.updateSyntaxHighlight();
+
             // Restore cursor position from the state we're going forward to
             this.$nextTick(() => {
                 this.saveNote();
@@ -357,6 +364,7 @@ export function createEditor() {
             );
 
             this.noteContent = result.text;
+            this.updateSyntaxHighlight();
 
             // Dead keys collapse the caret after the closing delimiter so the
             // next keystroke continues typing instead of replacing the wrapped
@@ -390,6 +398,7 @@ export function createEditor() {
             
             // Update content
             this.noteContent = this.noteContent.substring(0, start) + newText + this.noteContent.substring(end);
+            this.updateSyntaxHighlight();
             
             // Set cursor position to select the URL part for easy editing
             this.$nextTick(() => {
@@ -424,6 +433,7 @@ export function createEditor() {
             
             // Insert the table
             this.noteContent = textBefore + prefix + table + this.noteContent.substring(cursorPos);
+            this.updateSyntaxHighlight();
             
             // Position cursor at first header for easy editing
             this.$nextTick(() => {
@@ -512,6 +522,7 @@ export function createEditor() {
             }
             
             this.noteContent = beforeText + replacement + afterText;
+            this.updateSyntaxHighlight();
             
             this.$nextTick(() => {
                 if (selectedText) {

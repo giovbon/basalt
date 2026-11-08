@@ -143,6 +143,40 @@
                                     </label>
                                     <p class="text-xs mt-1" style="color: var(--text-tertiary);" x-text="t('settings.auto_fill_note_title_desc')"></p>
                                 </div>
+
+                                <!-- ntfy inbox -->
+                                <form class="mb-4 border-t pt-4" style="border-color: var(--border-primary);" @submit.prevent="saveNtfyConfig()">
+                                    <h3 class="text-xs font-semibold uppercase tracking-wide mb-2" style="color: var(--text-secondary);" x-text="t('settings.ntfy_title')"></h3>
+                                    <p class="text-xs mb-3" style="color: var(--text-tertiary);" x-text="t('settings.ntfy_description')"></p>
+
+                                    <label class="flex items-center gap-2 mb-3 text-xs" style="color: var(--text-secondary);">
+                                        <input type="checkbox" x-model="ntfyConfig.enabled">
+                                        <span x-text="t('settings.ntfy_enabled')"></span>
+                                    </label>
+
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);" for="ntfy-server-url" x-text="t('settings.ntfy_server')"></label>
+                                    <input id="ntfy-server-url" type="url" required x-model="ntfyConfig.serverUrl" class="w-full px-2 py-2 mb-3 text-sm rounded" style="background-color: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-primary);">
+
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);" for="ntfy-topic" x-text="t('settings.ntfy_topic')"></label>
+                                    <input id="ntfy-topic" type="text" x-model="ntfyConfig.topic" :required="ntfyConfig.enabled" class="w-full px-2 py-2 mb-3 text-sm rounded" style="background-color: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-primary);">
+
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);" for="ntfy-username" x-text="t('settings.ntfy_username')"></label>
+                                    <input id="ntfy-username" type="text" autocomplete="username" x-model="ntfyConfig.username" class="w-full px-2 py-2 mb-3 text-sm rounded" style="background-color: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-primary);">
+
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);" for="ntfy-password" x-text="t('settings.ntfy_password')"></label>
+                                    <input id="ntfy-password" type="password" autocomplete="new-password" x-model="ntfyConfig.password" @input="ntfyConfig.clearPassword = false" class="w-full px-2 py-2 mb-1 text-sm rounded" style="background-color: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-primary);" :placeholder="ntfyConfig.passwordConfigured ? t('settings.ntfy_password_saved') : t('settings.ntfy_password_optional')">
+                                    <label x-show="ntfyConfig.passwordConfigured" class="flex items-center gap-2 mb-3 mt-2 text-xs" style="color: var(--text-secondary);">
+                                        <input type="checkbox" x-model="ntfyConfig.clearPassword">
+                                        <span x-text="t('settings.ntfy_clear_password')"></span>
+                                    </label>
+
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);" for="ntfy-capture-dir" x-text="t('settings.ntfy_capture_dir')"></label>
+                                    <input id="ntfy-capture-dir" type="text" required x-model="ntfyConfig.captureDir" class="w-full px-2 py-2 mb-3 text-sm rounded" style="background-color: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-primary);">
+
+                                    <button type="submit" :disabled="ntfyConfig.saving" class="w-full px-3 py-2 text-sm rounded transition-colors disabled:opacity-50" style="background-color: var(--accent-primary); color: var(--bg-primary);">
+                                        <span x-text="ntfyConfig.saving ? t('settings.ntfy_saving') : t('settings.ntfy_save')"></span>
+                                    </button>
+                                </form>
                                 
                                 <!-- Logout (if auth enabled) - uses authEnabled from main app state -->
                                 <div x-show="authEnabled" class="mb-4">

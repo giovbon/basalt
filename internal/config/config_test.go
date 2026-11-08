@@ -181,3 +181,104 @@ func TestLoadDefaultAppNameBasalt(t *testing.T) {
 		t.Errorf("App.Name = %q, want Basalt", cfg.App.Name)
 	}
 }
+
+func TestLoadNtfySettings(t *testing.T) {
+	dir := t.TempDir()
+	configPath, versionPath := writeConfigAndVersion(t, dir, `ntfy:
+  enabled: true
+  server_url: "https://ntfy.example"
+  topic: "my-inbox"
+  username: "ntfy-user"
+  password: "secret"
+  capture_dir: "Capturas/ntfy"
+`, "1.0.0")
+
+	cfg, err := Load(configPath, versionPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Ntfy.Enabled || cfg.Ntfy.ServerURL != "https://ntfy.example" ||
+		cfg.Ntfy.Topic != "my-inbox" || cfg.Ntfy.Username != "ntfy-user" || cfg.Ntfy.Password != "secret" ||
+		cfg.Ntfy.CaptureDir != filepath.Join("Capturas", "ntfy") {
+		t.Errorf("Ntfy config = %#v", cfg.Ntfy)
+	}
+}
+
+func TestLoadNtfyEnvironmentOverrides(t *testing.T) {
+	dir := t.TempDir()
+	configPath, versionPath := writeConfigAndVersion(t, dir, "", "1.0.0")
+	t.Setenv("NTFY_ENABLED", "true")
+	t.Setenv("NTFY_SERVER_URL", "https://ntfy.example")
+	t.Setenv("NTFY_TOPIC", "env-inbox")
+	t.Setenv("NTFY_USERNAME", "env-user")
+	t.Setenv("NTFY_PASSWORD", "env-password")
+	t.Setenv("NTFY_CAPTURE_DIR", "Captured")
+
+	cfg, err := Load(configPath, versionPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Ntfy.Enabled || cfg.Ntfy.ServerURL != "https://ntfy.example" ||
+		cfg.Ntfy.Topic != "env-inbox" || cfg.Ntfy.Username != "env-user" || cfg.Ntfy.Password != "env-password" ||
+		cfg.Ntfy.CaptureDir != "Captured" {
+		t.Errorf("Ntfy config = %#v", cfg.Ntfy)
+	}
+}
+
+func TestLoadEnabledNtfyRequiresTopic(t *testing.T) {
+	dir := t.TempDir()
+	configPath, versionPath := writeConfigAndVersion(t, dir, "ntfy:\n  enabled: true\n", "1.0.0")
+	if _, err := Load(configPath, versionPath); err == nil {
+		t.Fatal("Load succeeded, want error for missing ntfy topic")
+	}
+}
+
+func TestLoadEnabledNtfyRequiresUsernameAndPasswordTogether(t *testing.T) {
+	dir := t.TempDir()
+	configPath, versionPath := writeConfigAndVersion(t, dir, `ntfy:
+  enabled: true
+  server_url: "https://ntfy.example"
+  topic: "inbox"
+  username: "ntfy-user"
+`, "1.0.0")
+	if _, err := Load(configPath, versionPath); err == nil {
+		t.Fatal("Load succeeded, want error for incomplete ntfy credentials")
+	}
+}
+
+func TestSaveNtfyConfigPreservesOtherSettings(t *testing.T) {
+	dir := t.TempDir()
+	configPath, _ := writeConfigAndVersion(t, dir, "app:\n  name: Keep me\nsearch:\n  enabled: true\n", "1.0.0")
+	if err := os.Chmod(configPath, 0644); err != nil {
+		t.Fatal(err)
+	}
+	settings := NtfyConfig{
+		Enabled:    true,
+		ServerURL:  "https://ntfy.example",
+		Topic:      "inbox",
+		Username:   "ntfy-user",
+		Password:   "secret",
+		CaptureDir: "Captura",
+	}
+
+	if err := SaveNtfyConfig(configPath, settings); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(configPath, filepath.Join(dir, "VERSION"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.App.Name != "Keep me" || !cfg.Search.Enabled {
+		t.Errorf("unrelated config was changed: app=%#v search=%#v", cfg.App, cfg.Search)
+	}
+	if cfg.Ntfy != settings {
+		t.Errorf("Ntfy config = %#v, want %#v", cfg.Ntfy, settings)
+	}
+	info, err := os.Stat(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0600 {
+		t.Errorf("config file mode = %04o, want 0600 when ntfy password is stored", got)
+	}
+}

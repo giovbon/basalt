@@ -15,6 +15,8 @@ export function renderMarkdownSync({
     mediaLookupStem,
     resolveWikiLink,
     resolveMediaWikilink,
+    resolveMarkdownMediaPathForNote,
+    encodeVaultRelativePathForMediaApi,
     getMediaType,
     typeIconSvg,
     escapeHtml,
@@ -234,7 +236,35 @@ export function renderMarkdownSync({
     // We need marked to be available globally
     let html;
     if (typeof marked !== 'undefined') {
-        html = marked.parse(contentToRender, { async: false });
+        const options = { async: false };
+        if (typeof marked.Renderer === 'function') {
+            const renderer = new marked.Renderer();
+            const renderDefaultImage = renderer.image.bind(renderer);
+            renderer.image = (image, title, text) => {
+                const href = typeof image === 'string' ? image : (image.href || '');
+                const imageTitle = typeof image === 'string' ? title : image.title;
+                const imageText = typeof image === 'string' ? text : image.text;
+                if (
+                    !href ||
+                    /^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(href) ||
+                    href.startsWith('/api/media/')
+                ) {
+                    return renderDefaultImage(image, title, text);
+                }
+
+                const mediaPath = resolveMarkdownMediaPathForNote(currentNote, href);
+                if (!mediaPath) return renderDefaultImage(image, title, text);
+                const encodedPath = encodeVaultRelativePathForMediaApi(mediaPath);
+                const src = `/api/media/${encodedPath}`;
+                const alt = escapeHtml(imageText || '').replace(/"/g, '&quot;');
+                const titleAttribute = imageTitle
+                    ? ` title="${escapeHtml(imageTitle).replace(/"/g, '&quot;')}"`
+                    : '';
+                return `<img src="${src}" alt="${alt}"${titleAttribute}>`;
+            };
+            options.renderer = renderer;
+        }
+        html = marked.parse(contentToRender, options);
     } else {
         html = contentToRender; // fallback if marked not loaded yet
     }

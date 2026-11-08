@@ -18,6 +18,13 @@ services:
       - INDEX_FILE=/app/data/.basalt-index.gob
       - APP_NAME=Basalt
       - DEFAULT_THEME=light
+      # Monitoramento opcional de um tópico ntfy:
+      # - NTFY_ENABLED=true
+      # - NTFY_SERVER_URL=https://ntfy.sh
+      # - NTFY_TOPIC=meu-topico
+      # - NTFY_USERNAME=seu_usuario
+      # - NTFY_PASSWORD=sua_senha
+      # - NTFY_CAPTURE_DIR=Captura
       # Autenticação opcional:
       # - AUTHENTICATION_ENABLED=true
       # - AUTHENTICATION_PASSWORD=sua_senha_segura

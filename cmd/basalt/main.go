@@ -16,6 +16,7 @@ import (
 
 	"notediscovery"
 	"notediscovery/internal/config"
+	"notediscovery/internal/ntfy"
 	"notediscovery/internal/session"
 	"notediscovery/internal/vault"
 	"notediscovery/internal/web"
@@ -77,7 +78,11 @@ func run() error {
 		cfg.Authentication.Enabled,
 	)
 
-	handler := web.NewServer(cfg, v, sess, notediscovery.AssetFS())
+	ntfyController, err := ntfy.NewController(cfg.Ntfy, cfg.Storage.NotesDir)
+	if err != nil {
+		return fmt.Errorf("configuring ntfy monitor: %w", err)
+	}
+	handler := web.NewServer(cfg, v, sess, notediscovery.AssetFS(), ntfyController.Update)
 
 	addr := net.JoinHostPort(cfg.Server.Host, strconv.Itoa(cfg.Server.Port))
 	httpSrv := &http.Server{
@@ -92,6 +97,12 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	go func() {
+		if err := ntfyController.Run(ctx); err != nil {
+			log.Printf("ntfy monitor stopped: %v", err)
+		}
+	}()
 
 	errCh := make(chan error, 1)
 	go func() {

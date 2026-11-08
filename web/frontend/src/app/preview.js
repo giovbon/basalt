@@ -435,6 +435,8 @@ export function createPreview() {
                 mediaLookupStem: this._mediaLookupStem,
                 resolveWikiLink: this.resolveWikiLink.bind(this),
                 resolveMediaWikilink: this.resolveMediaWikilink.bind(this),
+                resolveMarkdownMediaPathForNote: this.resolveMarkdownMediaPathForNote.bind(this),
+                encodeVaultRelativePathForMediaApi: this.encodeVaultRelativePathForMediaApi.bind(this),
                 getMediaType: this.getMediaType.bind(this),
                 typeIconSvg,
                 escapeHtml: this.escapeHtml.bind(this),

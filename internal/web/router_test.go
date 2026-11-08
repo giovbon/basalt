@@ -1,8 +1,12 @@
 package web
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -44,6 +48,68 @@ func TestCORSPresentsVaryOrigin(t *testing.T) {
 	}
 	if got := rec.Header().Get("Vary"); !strings.Contains(got, "Origin") {
 		t.Errorf("Vary = %q, want it to contain Origin", got)
+	}
+}
+
+func TestUpdateNtfyConfigSavesAndHidesPassword(t *testing.T) {
+	s := newTestRouter(t, []string{"*"}, false)
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(configPath, []byte("app:\n  name: Keep me\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s.cfg.ConfigFile = configPath
+	s.cfg.Storage.NotesDir = t.TempDir()
+	s.cfg.Ntfy.ServerURL = "https://ntfy.example"
+	s.cfg.Ntfy.CaptureDir = "Captura"
+	var updated bool
+	systemHandler := NewSystemHandler(s.cfg, s.vault, nil, func(cfg config.NtfyConfig) error {
+		updated = true
+		if !cfg.Enabled || cfg.Topic != "inbox" || cfg.Username != "ntfy-user" || cfg.Password != "secret" {
+			t.Errorf("updated ntfy config = %#v", cfg)
+		}
+		return nil
+	})
+
+	body := bytes.NewBufferString(`{"enabled":true,"serverUrl":"https://ntfy.example","topic":"inbox","username":"ntfy-user","password":"secret","captureDir":"Captura"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/ntfy/config", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	systemHandler.UpdateNtfyConfig(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if !updated {
+		t.Fatal("ntfy updater was not called")
+	}
+
+	var saved NtfyStatus
+	if err := json.Unmarshal(rec.Body.Bytes(), &saved); err != nil {
+		t.Fatal(err)
+	}
+	if !saved.Enabled || !saved.PasswordConfigured || saved.Username != "ntfy-user" {
+		t.Errorf("saved status = %#v, want enabled and credentials configured", saved)
+	}
+	if strings.Contains(rec.Body.String(), "secret") {
+		t.Fatal("response exposed the ntfy password")
+	}
+
+	body = bytes.NewBufferString(`{"enabled":true,"serverUrl":"https://ntfy.example","topic":"inbox","username":"ntfy-user","password":"","captureDir":"Captura"}`)
+	req = httptest.NewRequest(http.MethodPost, "/api/ntfy/config", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	systemHandler.UpdateNtfyConfig(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST with blank password status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"passwordConfigured":true`) {
+		t.Errorf("blank password replaced the saved password: %s", rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/config", nil)
+	rec = httptest.NewRecorder()
+	systemHandler.GetConfig(rec, req)
+	if strings.Contains(rec.Body.String(), "secret") {
+		t.Fatal("GET /api/config exposed the ntfy password")
 	}
 }
 

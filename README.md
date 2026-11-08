@@ -186,3 +186,38 @@ Todas as variáveis podem ser definidas no ambiente ou via `docker-compose.yml`:
 | `UPLOAD_MAX_AUDIO_MB` | `50` | Tamanho máximo de áudio permitido em upload. |
 | `UPLOAD_MAX_VIDEO_MB` | `100` | Tamanho máximo de vídeo permitido em upload. |
 | `UPLOAD_MAX_PDF_MB` | `20` | Tamanho máximo de PDF permitido em upload. |
+| `NTFY_ENABLED` | `false` | Ativa o monitoramento de um tópico ntfy. |
+| `NTFY_SERVER_URL` | `https://ntfy.sh` | URL base do servidor ntfy (pode ser self-hosted). |
+| `NTFY_TOPIC` | *(vazio)* | Tópico a monitorar; obrigatório quando o recurso está ativo. |
+| `NTFY_USERNAME` | *(vazio)* | Usuário da conta ntfy (para tópicos protegidos). |
+| `NTFY_PASSWORD` | *(vazio)* | Senha da conta ntfy (para tópicos protegidos). |
+| `NTFY_CAPTURE_DIR` | `Captura` | Pasta relativa a `NOTES_DIR` onde as capturas serão salvas. |
+
+### Captura de mensagens do ntfy
+
+O monitoramento é opcional e roda no servidor. Você pode configurá-lo no painel
+lateral **Configurações > Captura via ntfy**; ao salvar, as alterações são
+gravadas no `config.yaml` e aplicadas imediatamente. Também é possível configurar
+diretamente no arquivo:
+
+```yaml
+ntfy:
+  enabled: true
+  server_url: "https://ntfy.sh"
+  topic: "meu-topico"
+  username: "" # opcional para tópicos protegidos
+  password: "" # opcional para tópicos protegidos
+  capture_dir: "Captura"
+```
+
+Para tópicos protegidos, preencha usuário e senha juntos. A senha é armazenada
+no `config.yaml` com permissões restritas e nunca é devolvida pela API; deixe o
+campo vazio no painel para manter a senha salva.
+
+Cada mensagem vira uma nota Markdown na pasta `Captura` dentro do vault;
+anexos são salvos ao lado e vinculados na nota. O monitor busca as mensagens
+retidas pelo ntfy ao iniciar e ao reconectar, evitando duplicatas já capturadas.
+Anexos precisam estar hospedados no mesmo servidor ntfy configurado e têm limite
+de 100 MB. Em Docker, a pasta fica persistente no volume de `NOTES_DIR`.
+Variáveis `NTFY_*` definidas no ambiente prevalecem sobre o arquivo na próxima
+inicialização.

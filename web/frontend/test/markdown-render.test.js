@@ -5,9 +5,15 @@ import { renderMarkdownSync } from '../src/lib/markdown-render.js';
 
 // Minimal mocks for browser globals used by the renderer
 globalThis.marked = {
+    Renderer: class {
+        image(image, title, text) {
+            const token = typeof image === 'string' ? { href: image, title, text } : image;
+            return `<img src="${token.href}" alt="${token.text}"${token.title ? ` title="${token.title}"` : ''}>`;
+        }
+    },
     use: () => {},
     setOptions: () => {},
-    parse: (src) => {
+    parse: (src, options = {}) => {
         if (/^<!--CODEBLOCK\d+-->$/.test(src.trim())) return src.trim();
         const codeBlock = src.match(/^```(\w*)\n([\s\S]*?)```$/);
         if (codeBlock) {
@@ -15,7 +21,13 @@ globalThis.marked = {
             return `<pre><code${language ? ` class="language-${language}"` : ''}>${code}</code></pre>`;
         }
         const html = src
-            .replace(/`([^`]+)`/g, '<code>$1</code>');
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/!\[([^\]]*)\]\((?:<([^>]+)>|([^)]+))\)/g, (match, text, angledHref, plainHref) => {
+                const token = { text, href: angledHref || plainHref, title: null };
+                return options.renderer
+                    ? options.renderer.image(token.href, token.title, token.text)
+                    : `<img src="${token.href}" alt="${text}">`;
+            });
         return `<p>${html.replace(/\n/g, '</p><p>')}</p>`;
     },
 };
@@ -38,6 +50,12 @@ function makeMockDeps(overrides = {}) {
         mediaLookupStem: new Map(),
         resolveWikiLink: () => null,
         resolveMediaWikilink: () => null,
+        resolveMarkdownMediaPathForNote: (notePath, src) => {
+            const directory = notePath?.includes('/') ? notePath.slice(0, notePath.lastIndexOf('/')) : '';
+            const path = src.startsWith('/') ? src.slice(1) : `${directory ? `${directory}/` : ''}${src}`;
+            return path.split('/').filter((segment) => segment && segment !== '.').join('/');
+        },
+        encodeVaultRelativePathForMediaApi: (path) => path.split('/').map(encodeURIComponent).join('/'),
         getMediaType: () => 'image',
         typeIconSvg: () => '<svg></svg>',
         escapeHtml: (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
@@ -106,6 +124,27 @@ test('media wikilinks produce img tags', () => {
     });
     const html = renderMarkdownSync({ noteContent: '![[image.png]]', ...deps });
     assert.match(html, /image\.png/);
+});
+
+test('markdown images use the media API with paths relative to their note', () => {
+    const deps = makeMockDeps();
+    const html = renderMarkdownSync({
+        noteContent: '![photo](<photo one.jpg>)',
+        currentNote: 'Captura/capture.md',
+        ...deps,
+    });
+    assert.match(html, /src="\/api\/media\/Captura\/photo%20one\.jpg"/);
+    assert.match(html, /alt="photo"/);
+});
+
+test('external markdown images keep their URL', () => {
+    const deps = makeMockDeps();
+    const html = renderMarkdownSync({
+        noteContent: '![photo](https://example.com/photo.jpg)',
+        currentNote: 'Captura/capture.md',
+        ...deps,
+    });
+    assert.match(html, /src="https:\/\/example\.com\/photo\.jpg"/);
 });
 
 test('callouts are converted to divs', () => {

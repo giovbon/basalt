@@ -13,25 +13,33 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"notediscovery/internal/config"
+	"notediscovery/internal/ntfy"
 	"notediscovery/internal/themes"
 	"notediscovery/internal/vault"
 )
 
 type SystemHandler struct {
-	cfg      *config.Config
-	vault    *vault.Vault
-	assetsFS fs.FS
+	cfg        *config.Config
+	vault      *vault.Vault
+	assetsFS   fs.FS
+	ntfyMu     sync.RWMutex
+	ntfyUpdate func(config.NtfyConfig) error
 }
 
-func NewSystemHandler(cfg *config.Config, v *vault.Vault, assetsFS fs.FS) *SystemHandler {
-	return &SystemHandler{
+func NewSystemHandler(cfg *config.Config, v *vault.Vault, assetsFS fs.FS, ntfyUpdater ...func(config.NtfyConfig) error) *SystemHandler {
+	handler := &SystemHandler{
 		cfg:      cfg,
 		vault:    v,
 		assetsFS: assetsFS,
 	}
+	if len(ntfyUpdater) > 0 {
+		handler.ntfyUpdate = ntfyUpdater[0]
+	}
+	return handler
 }
 
 type AuthStatus struct {
@@ -48,9 +56,22 @@ type ConfigResponse struct {
 	DefaultTheme    string     `json:"defaultTheme"`
 	UploadMaxNoteMb int        `json:"uploadMaxNoteMb"`
 	Authentication  AuthStatus `json:"authentication"`
+	Ntfy            NtfyStatus `json:"ntfy"`
+}
+
+type NtfyStatus struct {
+	Enabled            bool   `json:"enabled"`
+	ServerURL          string `json:"serverUrl"`
+	Topic              string `json:"topic"`
+	CaptureDir         string `json:"captureDir"`
+	Username           string `json:"username"`
+	PasswordConfigured bool   `json:"passwordConfigured"`
 }
 
 func (h *SystemHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
+	h.ntfyMu.RLock()
+	ntfySettings := h.cfg.Ntfy
+	h.ntfyMu.RUnlock()
 	resp := ConfigResponse{
 		Name:            h.cfg.App.Name,
 		Version:         h.cfg.App.Version,
@@ -63,8 +84,97 @@ func (h *SystemHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		Authentication: AuthStatus{
 			Enabled: h.cfg.Authentication.Enabled,
 		},
+		Ntfy: NtfyStatus{
+			Enabled:            ntfySettings.Enabled,
+			ServerURL:          ntfySettings.ServerURL,
+			Topic:              ntfySettings.Topic,
+			CaptureDir:         ntfySettings.CaptureDir,
+			Username:           ntfySettings.Username,
+			PasswordConfigured: ntfySettings.Password != "",
+		},
 	}
 	RespondJSON(w, http.StatusOK, resp)
+}
+
+func (h *SystemHandler) UpdateNtfyConfig(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.ConfigFile == "" {
+		RespondError(w, http.StatusInternalServerError, "Config file path is unavailable")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var payload struct {
+		Enabled       bool   `json:"enabled"`
+		ServerURL     string `json:"serverUrl"`
+		Topic         string `json:"topic"`
+		Username      string `json:"username"`
+		Password      string `json:"password"`
+		ClearPassword bool   `json:"clearPassword"`
+		CaptureDir    string `json:"captureDir"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&payload); err != nil {
+		RespondError(w, http.StatusBadRequest, "Invalid ntfy settings")
+		return
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		RespondError(w, http.StatusBadRequest, "Invalid ntfy settings")
+		return
+	}
+	password := payload.Password
+	if payload.ClearPassword && password != "" {
+		RespondError(w, http.StatusBadRequest, "Password cannot be set and cleared at the same time")
+		return
+	}
+
+	h.ntfyMu.Lock()
+	settings := h.cfg.Ntfy
+	settings.Enabled = payload.Enabled
+	settings.ServerURL = strings.TrimSpace(payload.ServerURL)
+	settings.Topic = strings.TrimSpace(payload.Topic)
+	settings.Username = strings.TrimSpace(payload.Username)
+	settings.CaptureDir = strings.TrimSpace(payload.CaptureDir)
+	if payload.ClearPassword {
+		settings.Password = ""
+	} else if password != "" {
+		settings.Password = password
+	}
+	if settings.Enabled {
+		if _, err := ntfy.NewMonitor(settings, h.cfg.Storage.NotesDir); err != nil {
+			h.ntfyMu.Unlock()
+			RespondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	if (settings.Username == "") != (settings.Password == "") {
+		h.ntfyMu.Unlock()
+		RespondError(w, http.StatusBadRequest, "ntfy username and password must both be configured")
+		return
+	}
+	if err := config.SaveNtfyConfig(h.cfg.ConfigFile, settings); err != nil {
+		h.ntfyMu.Unlock()
+		RespondError(w, http.StatusInternalServerError, SafeErrorMessage(err, "Failed to save ntfy settings", h.cfg.Server.Debug))
+		return
+	}
+	if h.ntfyUpdate != nil {
+		if err := h.ntfyUpdate(settings); err != nil {
+			h.ntfyMu.Unlock()
+			RespondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	h.cfg.Ntfy = settings
+	h.ntfyMu.Unlock()
+
+	RespondJSON(w, http.StatusOK, NtfyStatus{
+		Enabled:            settings.Enabled,
+		ServerURL:          settings.ServerURL,
+		Topic:              settings.Topic,
+		CaptureDir:         settings.CaptureDir,
+		Username:           settings.Username,
+		PasswordConfigured: settings.Password != "",
+	})
 }
 
 func (h *SystemHandler) GetHealth(w http.ResponseWriter, r *http.Request) {

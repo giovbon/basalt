@@ -13,12 +13,14 @@ import (
 )
 
 type Config struct {
+	ConfigFile     string               `yaml:"-"`
 	App            AppConfig            `yaml:"app"`
 	Server         ServerConfig         `yaml:"server"`
 	Storage        StorageConfig        `yaml:"storage"`
 	Search         SearchConfig         `yaml:"search"`
 	UI             UIConfig             `yaml:"ui"`
 	Authentication AuthenticationConfig `yaml:"authentication"`
+	Ntfy           NtfyConfig           `yaml:"ntfy"`
 
 	// Derived / runtime config
 	DemoMode        bool  `yaml:"-"`
@@ -69,6 +71,15 @@ type AuthenticationConfig struct {
 	APIKey        string `yaml:"api_key"`
 }
 
+type NtfyConfig struct {
+	Enabled    bool   `yaml:"enabled"`
+	ServerURL  string `yaml:"server_url"`
+	Topic      string `yaml:"topic"`
+	Username   string `yaml:"username"`
+	Password   string `yaml:"password"`
+	CaptureDir string `yaml:"capture_dir"`
+}
+
 func parseBoolEnv(val string) bool {
 	v := strings.ToLower(strings.TrimSpace(val))
 	return v == "true" || v == "1" || v == "yes"
@@ -86,6 +97,7 @@ func parseIntEnv(key string, fallback int) int {
 // Load reads config.yaml, merges VERSION, applies environment variables, and prepares bcrypt hash.
 func Load(configPath, versionPath string) (*Config, error) {
 	cfg := &Config{
+		ConfigFile: configPath,
 		App: AppConfig{
 			Name: "Basalt",
 		},
@@ -111,6 +123,10 @@ func Load(configPath, versionPath string) (*Config, error) {
 			Password:      "admin",
 			SessionMaxAge: 604800, // 7 days
 			APIKey:        "",
+		},
+		Ntfy: NtfyConfig{
+			ServerURL:  "https://ntfy.sh",
+			CaptureDir: "Captura",
 		},
 	}
 
@@ -208,6 +224,44 @@ func Load(configPath, versionPath string) (*Config, error) {
 		log.Printf("API key loaded from AUTHENTICATION_API_KEY env var")
 	}
 
+	if enabled := os.Getenv("NTFY_ENABLED"); enabled != "" {
+		cfg.Ntfy.Enabled = parseBoolEnv(enabled)
+	}
+	if serverURL := strings.TrimSpace(os.Getenv("NTFY_SERVER_URL")); serverURL != "" {
+		cfg.Ntfy.ServerURL = serverURL
+	}
+	if topic := strings.TrimSpace(os.Getenv("NTFY_TOPIC")); topic != "" {
+		cfg.Ntfy.Topic = topic
+	}
+	if username := strings.TrimSpace(os.Getenv("NTFY_USERNAME")); username != "" {
+		cfg.Ntfy.Username = username
+	}
+	if password := os.Getenv("NTFY_PASSWORD"); password != "" {
+		cfg.Ntfy.Password = password
+	}
+	if captureDir := strings.TrimSpace(os.Getenv("NTFY_CAPTURE_DIR")); captureDir != "" {
+		cfg.Ntfy.CaptureDir = captureDir
+	}
+	if cfg.Ntfy.Enabled {
+		if cfg.Ntfy.Topic == "" {
+			return nil, fmt.Errorf("ntfy is enabled but no topic is configured")
+		}
+		if cfg.Ntfy.ServerURL == "" {
+			return nil, fmt.Errorf("ntfy is enabled but no server_url is configured")
+		}
+		if (cfg.Ntfy.Username == "") != (cfg.Ntfy.Password == "") {
+			return nil, fmt.Errorf("ntfy username and password must both be configured")
+		}
+		if cfg.Ntfy.CaptureDir == "" || filepath.IsAbs(cfg.Ntfy.CaptureDir) {
+			return nil, fmt.Errorf("ntfy capture_dir must be a non-empty relative path")
+		}
+		captureDir := filepath.Clean(cfg.Ntfy.CaptureDir)
+		if captureDir == ".." || strings.HasPrefix(captureDir, ".."+string(filepath.Separator)) {
+			return nil, fmt.Errorf("ntfy capture_dir must stay inside the notes directory")
+		}
+		cfg.Ntfy.CaptureDir = captureDir
+	}
+
 	// Password priority: env var > config > default "admin"
 	plainPassword := ""
 	if envPw := os.Getenv("AUTHENTICATION_PASSWORD"); envPw != "" {
@@ -259,6 +313,95 @@ func Load(configPath, versionPath string) (*Config, error) {
 	cfg.ArchiveMaxMb = parseIntEnv("ARCHIVE_MAX_FOLDER_MB", 500)
 
 	return cfg, nil
+}
+
+func SaveNtfyConfig(configPath string, settings NtfyConfig) error {
+	data, err := os.ReadFile(configPath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("reading config file: %w", err)
+	}
+
+	var document yaml.Node
+	if len(data) == 0 {
+		document = yaml.Node{Kind: yaml.DocumentNode}
+		document.Content = []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}
+	} else if err := yaml.Unmarshal(data, &document); err != nil {
+		return fmt.Errorf("parsing config file: %w", err)
+	}
+	if len(document.Content) == 0 || document.Content[0].Kind != yaml.MappingNode {
+		return fmt.Errorf("config file root must be a mapping")
+	}
+
+	root := document.Content[0]
+	encoded, err := yaml.Marshal(settings)
+	if err != nil {
+		return fmt.Errorf("encoding ntfy config: %w", err)
+	}
+	var value yaml.Node
+	if err := yaml.Unmarshal(encoded, &value); err != nil {
+		return fmt.Errorf("decoding ntfy config: %w", err)
+	}
+	encodedValue := value.Content[0]
+
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value == "ntfy" {
+			encodedValue.HeadComment = root.Content[i+1].HeadComment
+			encodedValue.LineComment = root.Content[i+1].LineComment
+			encodedValue.FootComment = root.Content[i+1].FootComment
+			root.Content[i+1] = encodedValue
+			data, err = yaml.Marshal(&document)
+			if err != nil {
+				return fmt.Errorf("encoding config file: %w", err)
+			}
+			return writeConfigFile(configPath, data, settings.Password != "")
+		}
+	}
+	root.Content = append(root.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "ntfy"},
+		encodedValue,
+	)
+	data, err = yaml.Marshal(&document)
+	if err != nil {
+		return fmt.Errorf("encoding config file: %w", err)
+	}
+	return writeConfigFile(configPath, data, settings.Password != "")
+}
+
+func writeConfigFile(configPath string, data []byte, protectSecrets bool) error {
+	mode := os.FileMode(0644)
+	if info, err := os.Stat(configPath); err == nil {
+		mode = info.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("checking config file permissions: %w", err)
+	}
+	if protectSecrets {
+		mode = 0600
+	}
+	tempFile, err := os.CreateTemp(filepath.Dir(configPath), ".config-*.yaml")
+	if err != nil {
+		return fmt.Errorf("creating temporary config file: %w", err)
+	}
+	tempPath := tempFile.Name()
+	defer os.Remove(tempPath)
+	if err := tempFile.Chmod(mode); err != nil {
+		_ = tempFile.Close()
+		return fmt.Errorf("setting config file permissions: %w", err)
+	}
+	if _, err := tempFile.Write(data); err != nil {
+		_ = tempFile.Close()
+		return fmt.Errorf("writing config file: %w", err)
+	}
+	if err := tempFile.Sync(); err != nil {
+		_ = tempFile.Close()
+		return fmt.Errorf("syncing config file: %w", err)
+	}
+	if err := tempFile.Close(); err != nil {
+		return fmt.Errorf("closing config file: %w", err)
+	}
+	if err := os.Rename(tempPath, configPath); err != nil {
+		return fmt.Errorf("replacing config file: %w", err)
+	}
+	return nil
 }
 
 func boolStatus(b bool) string {
