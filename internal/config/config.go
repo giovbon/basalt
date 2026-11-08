@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/yaml.v3"
@@ -14,10 +15,12 @@ import (
 
 type Config struct {
 	ConfigFile     string               `yaml:"-"`
+	SettingsMu     sync.RWMutex         `yaml:"-"`
 	App            AppConfig            `yaml:"app"`
 	Server         ServerConfig         `yaml:"server"`
 	Storage        StorageConfig        `yaml:"storage"`
 	Search         SearchConfig         `yaml:"search"`
+	Todos          TodosConfig          `yaml:"todos"`
 	UI             UIConfig             `yaml:"ui"`
 	Authentication AuthenticationConfig `yaml:"authentication"`
 	Ntfy           NtfyConfig           `yaml:"ntfy"`
@@ -55,6 +58,10 @@ type StorageConfig struct {
 
 type SearchConfig struct {
 	Enabled bool `yaml:"enabled"`
+}
+
+type TodosConfig struct {
+	Keywords string `yaml:"keywords"`
 }
 
 type UIConfig struct {
@@ -112,6 +119,9 @@ func Load(configPath, versionPath string) (*Config, error) {
 		},
 		Search: SearchConfig{
 			Enabled: true,
+		},
+		Todos: TodosConfig{
+			Keywords: "TODO, FIXME, LATER",
 		},
 		UI: UIConfig{
 			DefaultTheme:    "light",
@@ -316,6 +326,14 @@ func Load(configPath, versionPath string) (*Config, error) {
 }
 
 func SaveNtfyConfig(configPath string, settings NtfyConfig) error {
+	return saveConfigSection(configPath, "ntfy", settings, settings.Password != "")
+}
+
+func SaveTodoKeywords(configPath, keywords string) error {
+	return saveConfigSection(configPath, "todos", TodosConfig{Keywords: keywords}, false)
+}
+
+func saveConfigSection(configPath, section string, settings any, protectSecrets bool) error {
 	data, err := os.ReadFile(configPath)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("reading config file: %w", err)
@@ -335,16 +353,16 @@ func SaveNtfyConfig(configPath string, settings NtfyConfig) error {
 	root := document.Content[0]
 	encoded, err := yaml.Marshal(settings)
 	if err != nil {
-		return fmt.Errorf("encoding ntfy config: %w", err)
+		return fmt.Errorf("encoding %s config: %w", section, err)
 	}
 	var value yaml.Node
 	if err := yaml.Unmarshal(encoded, &value); err != nil {
-		return fmt.Errorf("decoding ntfy config: %w", err)
+		return fmt.Errorf("decoding %s config: %w", section, err)
 	}
 	encodedValue := value.Content[0]
 
 	for i := 0; i+1 < len(root.Content); i += 2 {
-		if root.Content[i].Value == "ntfy" {
+		if root.Content[i].Value == section {
 			encodedValue.HeadComment = root.Content[i+1].HeadComment
 			encodedValue.LineComment = root.Content[i+1].LineComment
 			encodedValue.FootComment = root.Content[i+1].FootComment
@@ -353,18 +371,18 @@ func SaveNtfyConfig(configPath string, settings NtfyConfig) error {
 			if err != nil {
 				return fmt.Errorf("encoding config file: %w", err)
 			}
-			return writeConfigFile(configPath, data, settings.Password != "")
+			return writeConfigFile(configPath, data, protectSecrets)
 		}
 	}
 	root.Content = append(root.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "ntfy"},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: section},
 		encodedValue,
 	)
 	data, err = yaml.Marshal(&document)
 	if err != nil {
 		return fmt.Errorf("encoding config file: %w", err)
 	}
-	return writeConfigFile(configPath, data, settings.Password != "")
+	return writeConfigFile(configPath, data, protectSecrets)
 }
 
 func writeConfigFile(configPath string, data []byte, protectSecrets bool) error {

@@ -31,14 +31,12 @@ export const LOCAL_SETTINGS = {
     syntaxHighlightEnabled: { key: 'syntaxHighlightEnabled', type: 'boolean', default: true },
     readableLineLength: { key: 'readableLineLength', type: 'boolean', default: true },
     favoritesExpanded: { key: 'favoritesExpanded', type: 'boolean', default: true },
-    tagsExpanded: { key: 'tagsExpanded', type: 'boolean', default: false },
     hideUnderscoreFolders: { key: 'hideUnderscoreFolders', type: 'boolean', default: false },
     tabInsertsTab: { key: 'tabInsertsTab', type: 'boolean', default: true },
     sidebarPanelCollapsed: { key: 'sidebarPanelCollapsed', type: 'boolean', default: false },
     autoFillNoteTitle: { key: 'autoFillNoteTitle', type: 'boolean', default: false },
     // String settings
     sortMode: { key: 'sortMode', type: 'string', default: 'a-z' },
-    todoKeywords: { key: 'todoKeywords', type: 'string', default: 'TODO, FIXME, LATER' },
     newButtonAction: {
         key: 'newButtonAction', type: 'string', default: 'chooser',
         valid: ['chooser', 'note', 'folder']

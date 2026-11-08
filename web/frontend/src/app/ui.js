@@ -286,14 +286,6 @@ export function createUi() {
             }
         },
         
-        saveTagsExpanded() {
-            try {
-                saveSetting('tagsExpanded', this.tagsExpanded, LOCAL_SETTINGS);
-            } catch (error) {
-                console.error('Error saving tags expanded state:', error);
-            }
-        },
-        
         // Start resizing sidebar
         startResize(event) {
             this.isResizing = true;

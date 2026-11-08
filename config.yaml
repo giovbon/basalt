@@ -22,6 +22,8 @@ storage:
     # index_file: "./.basalt-index.gob"
 search:
     enabled: true
+todos:
+    keywords: "TODO, FIXME, LATER"
 # User interface behavior
 ui:
     # Theme used when a browser has not saved a theme preference yet.

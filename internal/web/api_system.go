@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"notediscovery/internal/config"
@@ -26,7 +25,6 @@ type SystemHandler struct {
 	cfg        *config.Config
 	vault      *vault.Vault
 	assetsFS   fs.FS
-	ntfyMu     sync.RWMutex
 	ntfyUpdate func(config.NtfyConfig) error
 }
 
@@ -55,6 +53,7 @@ type ConfigResponse struct {
 	AutosaveDelayMs int        `json:"autosaveDelayMs"`
 	DefaultTheme    string     `json:"defaultTheme"`
 	UploadMaxNoteMb int        `json:"uploadMaxNoteMb"`
+	TodoKeywords    string     `json:"todoKeywords"`
 	Authentication  AuthStatus `json:"authentication"`
 	Ntfy            NtfyStatus `json:"ntfy"`
 }
@@ -69,9 +68,10 @@ type NtfyStatus struct {
 }
 
 func (h *SystemHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
-	h.ntfyMu.RLock()
+	h.cfg.SettingsMu.RLock()
 	ntfySettings := h.cfg.Ntfy
-	h.ntfyMu.RUnlock()
+	todoKeywords := h.cfg.Todos.Keywords
+	h.cfg.SettingsMu.RUnlock()
 	resp := ConfigResponse{
 		Name:            h.cfg.App.Name,
 		Version:         h.cfg.App.Version,
@@ -81,6 +81,7 @@ func (h *SystemHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		AutosaveDelayMs: h.cfg.UI.AutosaveDelayMs,
 		DefaultTheme:    h.cfg.UI.DefaultTheme,
 		UploadMaxNoteMb: h.cfg.UploadMaxNoteMb,
+		TodoKeywords:    todoKeywords,
 		Authentication: AuthStatus{
 			Enabled: h.cfg.Authentication.Enabled,
 		},
@@ -128,7 +129,7 @@ func (h *SystemHandler) UpdateNtfyConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	h.ntfyMu.Lock()
+	h.cfg.SettingsMu.Lock()
 	settings := h.cfg.Ntfy
 	settings.Enabled = payload.Enabled
 	settings.ServerURL = strings.TrimSpace(payload.ServerURL)
@@ -142,30 +143,30 @@ func (h *SystemHandler) UpdateNtfyConfig(w http.ResponseWriter, r *http.Request)
 	}
 	if settings.Enabled {
 		if _, err := ntfy.NewMonitor(settings, h.cfg.Storage.NotesDir); err != nil {
-			h.ntfyMu.Unlock()
+			h.cfg.SettingsMu.Unlock()
 			RespondError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 	}
 	if (settings.Username == "") != (settings.Password == "") {
-		h.ntfyMu.Unlock()
+		h.cfg.SettingsMu.Unlock()
 		RespondError(w, http.StatusBadRequest, "ntfy username and password must both be configured")
 		return
 	}
 	if err := config.SaveNtfyConfig(h.cfg.ConfigFile, settings); err != nil {
-		h.ntfyMu.Unlock()
+		h.cfg.SettingsMu.Unlock()
 		RespondError(w, http.StatusInternalServerError, SafeErrorMessage(err, "Failed to save ntfy settings", h.cfg.Server.Debug))
 		return
 	}
 	if h.ntfyUpdate != nil {
 		if err := h.ntfyUpdate(settings); err != nil {
-			h.ntfyMu.Unlock()
+			h.cfg.SettingsMu.Unlock()
 			RespondError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 	}
 	h.cfg.Ntfy = settings
-	h.ntfyMu.Unlock()
+	h.cfg.SettingsMu.Unlock()
 
 	RespondJSON(w, http.StatusOK, NtfyStatus{
 		Enabled:            settings.Enabled,

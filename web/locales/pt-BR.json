@@ -103,7 +103,9 @@
     "open_at_line": "Abrir na linha {{line}}, coluna {{column}}",
     "keywords_label": "Palavras-chave de tarefas",
     "keywords_placeholder": "TODO, FIXME, LATER",
-    "keywords_description": "Separe as palavras-chave por vírgula. Só serão encontradas marcações no formato PALAVRA-CHAVE: descrição; a busca não diferencia maiúsculas de minúsculas."
+    "keywords_description": "Separe as palavras-chave por vírgula. Só serão encontradas marcações no formato PALAVRA-CHAVE: descrição; a busca não diferencia maiúsculas de minúsculas.",
+    "keywords_saved": "Palavras-chave salvas no servidor.",
+    "keywords_save_failed": "Não foi possível salvar as palavras-chave."
   },
   "notes": {
     "confirm_delete": "Excluir \"{{name}}\"?",

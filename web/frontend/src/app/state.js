@@ -46,6 +46,7 @@ export function createState() {
         viewMode: 'split', // 'edit', 'split', 'preview'
         searchQuery: '',
         todoKeywords: 'TODO, FIXME, LATER',
+        todoKeywordsSaving: false,
         todos: [],
         expandedTodoNotes: {},
         todosLoading: false,
@@ -135,7 +136,7 @@ export function createState() {
         sortMode: localStorage.getItem('sortMode') || 'a-z',
 
         // Icon rail / panel state
-        activePanel: 'files', // 'files', 'search', 'todos', 'tags', 'outline', 'backlinks', 'settings'
+        activePanel: 'files', // 'files', 'search', 'todos', 'outline', 'backlinks', 'settings'
         
         // Folder state
         folderTree: [],
@@ -146,7 +147,6 @@ export function createState() {
         // Tags state
         allTags: {},
         selectedTags: [],
-        tagsExpanded: false,
         tagReloadTimeout: null, // For debouncing tag reloads
 
         // Search state

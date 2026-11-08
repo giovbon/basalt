@@ -113,6 +113,33 @@ func TestUpdateNtfyConfigSavesAndHidesPassword(t *testing.T) {
 	}
 }
 
+func TestUpdateTodoKeywordsRouteSharesServerConfig(t *testing.T) {
+	s := newTestRouter(t, []string{"*"}, false)
+	s.cfg.ConfigFile = filepath.Join(t.TempDir(), "config.yaml")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/todos/config", bytes.NewBufferString(`{"keywords":"IDEA, BLOCKED"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/config", nil)
+	rec = httptest.NewRecorder()
+	s.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET config status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var response ConfigResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.TodoKeywords != "IDEA, BLOCKED" {
+		t.Fatalf("API config TODO keywords = %q, want IDEA, BLOCKED", response.TodoKeywords)
+	}
+}
+
 func TestCORSWildcard(t *testing.T) {
 	s := newTestRouter(t, []string{"*"}, false)
 

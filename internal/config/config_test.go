@@ -182,6 +182,33 @@ func TestLoadDefaultAppNameBasalt(t *testing.T) {
 	}
 }
 
+func TestLoadTodoKeywordsDefaultAndSavedValue(t *testing.T) {
+	dir := t.TempDir()
+	configPath, versionPath := writeConfigAndVersion(t, dir, "", "1.0.0")
+
+	cfg, err := Load(configPath, versionPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Todos.Keywords != "TODO, FIXME, LATER" {
+		t.Fatalf("default TODO keywords = %q", cfg.Todos.Keywords)
+	}
+
+	if err := SaveTodoKeywords(configPath, "IDEA, BLOCKED"); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(configPath, versionPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Todos.Keywords != "IDEA, BLOCKED" {
+		t.Fatalf("saved TODO keywords = %q, want IDEA, BLOCKED", cfg.Todos.Keywords)
+	}
+	if cfg.App.Name != "Basalt" {
+		t.Fatalf("unrelated config changed, App.Name = %q", cfg.App.Name)
+	}
+}
+
 func TestLoadNtfySettings(t *testing.T) {
 	dir := t.TempDir()
 	configPath, versionPath := writeConfigAndVersion(t, dir, `ntfy:

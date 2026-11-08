@@ -1,7 +1,9 @@
 package web
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"regexp"
 	"sort"
@@ -9,6 +11,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"notediscovery/internal/config"
 	"notediscovery/internal/search"
 	"notediscovery/internal/vault"
 )
@@ -33,16 +36,20 @@ type TodosResponse struct {
 
 type TodosHandler struct {
 	vault *vault.Vault
+	cfg   *config.Config
 }
 
-func NewTodosHandler(v *vault.Vault) *TodosHandler {
-	return &TodosHandler{vault: v}
+func NewTodosHandler(cfg *config.Config, v *vault.Vault) *TodosHandler {
+	return &TodosHandler{vault: v, cfg: cfg}
 }
 
 func (h *TodosHandler) ListTodos(w http.ResponseWriter, r *http.Request) {
-	keywords, err := parseTodoKeywords(r.URL.Query()["keywords"])
+	h.cfg.SettingsMu.RLock()
+	configuredKeywords := h.cfg.Todos.Keywords
+	h.cfg.SettingsMu.RUnlock()
+	keywords, err := parseTodoKeywords([]string{configuredKeywords})
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, err.Error())
+		RespondError(w, http.StatusInternalServerError, "Invalid TODO keyword configuration")
 		return
 	}
 
@@ -103,6 +110,50 @@ func (h *TodosHandler) ListTodos(w http.ResponseWriter, r *http.Request) {
 	})
 
 	RespondJSON(w, http.StatusOK, TodosResponse{Todos: todos})
+}
+
+type TodoKeywordsResponse struct {
+	Keywords string `json:"keywords"`
+}
+
+func (h *TodosHandler) UpdateKeywords(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.ConfigFile == "" {
+		RespondError(w, http.StatusInternalServerError, "Config file path is unavailable")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var payload TodoKeywordsResponse
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&payload); err != nil {
+		RespondError(w, http.StatusBadRequest, "Invalid TODO keywords")
+		return
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		RespondError(w, http.StatusBadRequest, "Invalid TODO keywords")
+		return
+	}
+
+	keywords, err := parseTodoKeywords([]string{payload.Keywords})
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	names := make([]string, len(keywords))
+	for i, keyword := range keywords {
+		names[i] = keyword.name
+	}
+	normalized := strings.Join(names, ", ")
+
+	h.cfg.SettingsMu.Lock()
+	defer h.cfg.SettingsMu.Unlock()
+	if err := config.SaveTodoKeywords(h.cfg.ConfigFile, normalized); err != nil {
+		RespondError(w, http.StatusInternalServerError, SafeErrorMessage(err, "Failed to save TODO keywords", h.cfg.Server.Debug))
+		return
+	}
+	h.cfg.Todos.Keywords = normalized
+	RespondJSON(w, http.StatusOK, TodoKeywordsResponse{Keywords: normalized})
 }
 
 type todoKeyword struct {

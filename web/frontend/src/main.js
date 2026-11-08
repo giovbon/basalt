@@ -68,7 +68,6 @@ const PANEL_COMPONENTS = [
     'filesPanel',
     'searchPanel',
     'todosPanel',
-    'tagsPanel',
     'outlinePanel',
     'backlinksPanel',
     'settingsPanel',

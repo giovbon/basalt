@@ -1,8 +1,6 @@
 // TODO list scanning and navigation.
 
-import { LOCAL_SETTINGS } from '../core/config.js';
 import * as api from '../core/api.js';
-import { saveSetting } from '../core/settings.js';
 
 export function createTodos() {
     return {
@@ -10,8 +8,7 @@ export function createTodos() {
             this.todosLoading = true;
             this.todosError = '';
             try {
-                const params = new URLSearchParams({ keywords: this.todoKeywords || '' });
-                const data = await api.getJSON(`/api/todos?${params}`);
+                const data = await api.getJSON('/api/todos');
                 this.todos = data.todos || [];
                 this.todosLoaded = true;
             } catch (error) {
@@ -23,9 +20,21 @@ export function createTodos() {
             }
         },
 
-        saveTodoKeywords() {
-            saveSetting('todoKeywords', this.todoKeywords, LOCAL_SETTINGS);
-            if (this.todosLoaded) this.loadTodos();
+        async saveTodoKeywords() {
+            if (this.todoKeywordsSaving) return;
+            this.todoKeywordsSaving = true;
+            try {
+                const result = await api.sendJSON('/api/todos/config', 'POST', {
+                    keywords: this.todoKeywords || '',
+                });
+                this.todoKeywords = result.keywords;
+                this.toast(this.t('todos.keywords_saved'), { type: 'success' });
+                if (this.todosLoaded) await this.loadTodos();
+            } catch (error) {
+                this.toast(error.detail || error.message || this.t('todos.keywords_save_failed'), { type: 'error' });
+            } finally {
+                this.todoKeywordsSaving = false;
+            }
         },
 
         openTodo(todo) {

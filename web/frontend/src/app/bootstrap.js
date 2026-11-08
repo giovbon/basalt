@@ -165,11 +165,6 @@ export function createBootstrap() {
                 this.renderPreview();
             });
             
-            // Watch tags panel expanded state and save to localStorage
-            this.$watch('tagsExpanded', () => {
-                this.saveTagsExpanded();
-            });
-            
             // Watch favorites expanded state and save to localStorage
             this.$watch('favoritesExpanded', () => {
                 this.saveFavoritesExpanded();
@@ -366,6 +361,9 @@ export function createBootstrap() {
                 }
                 if (Number.isFinite(config.uploadMaxNoteMb) && config.uploadMaxNoteMb > 0) {
                     this.uploadMaxNoteMb = config.uploadMaxNoteMb;
+                }
+                if (typeof config.todoKeywords === 'string') {
+                    this.todoKeywords = config.todoKeywords;
                 }
                 if (config.ntfy && typeof config.ntfy === 'object') {
                     this.ntfyConfig = {
