@@ -29,10 +29,10 @@ export function createQuickSwitcher() {
             this.quickSwitcherIndex = 0;
         },
         
-        // Filter notes for quick switcher based on query
+        // Filter notes and PDFs for quick switcher based on query
         filterQuickSwitcher(query) {
-            // Only include actual notes, not images
-            const notes = (this.notes || []).filter(n => n.type === 'note');
+            // Other media (such as images) are intentionally excluded.
+            const notes = (this.notes || []).filter(n => n.type === 'note' || n.type === 'document');
             if (!query || !query.trim()) {
                 // Show recent notes when no query
                 return notes.slice(0, 10);
@@ -62,7 +62,7 @@ export function createQuickSwitcher() {
                 e.preventDefault();
                 const note = results[this.quickSwitcherIndex];
                 if (note) {
-                    this.loadNote(note.path);
+                    this.openItem(note.path, note.type);
                     this.closeQuickSwitcher();
                 }
             } else if (e.key === 'Escape') {
@@ -83,7 +83,7 @@ export function createQuickSwitcher() {
         
         // Select note from quick switcher by click
         selectQuickSwitcherNote(note) {
-            this.loadNote(note.path);
+            this.openItem(note.path, note.type);
             this.closeQuickSwitcher();
         },
     };
