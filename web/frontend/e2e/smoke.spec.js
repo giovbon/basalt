@@ -185,6 +185,22 @@ test('edits a note and waits for autosave, then reloads it', async ({ page }) =>
   await expect(page.locator('#note-editor')).toHaveValue(/Saved by the e2e suite/);
 });
 
+test('undoes and redoes editor changes with keyboard shortcuts', async ({ page }) => {
+  await page.locator('.note-item[data-path="Welcome.md"]').click();
+  const editor = page.locator('#note-editor');
+  await expect(editor).toHaveValue(WELCOME_NOTE);
+
+  await editor.press('Control+End');
+  await editor.pressSequentially(' appended');
+  await editor.press('Control+z');
+  await expect(editor).toHaveValue(WELCOME_NOTE);
+
+  await editor.press('Control+Shift+z');
+  await expect(editor).toHaveValue(`${WELCOME_NOTE} appended`);
+
+  await restoreWelcomeNote(page);
+});
+
 test('uploads a media file through the global picker', async ({ page }) => {
   // Click the panel button, not the input: this exercises
   // $refs.globalFileInput from inside the files panel's Alpine scope.

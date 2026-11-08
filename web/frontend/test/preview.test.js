@@ -66,6 +66,70 @@ test('debounces query refreshes while the note is being edited', () => {
     }
 });
 
+test('debounces preview rendering and keeps only the latest scheduled render', () => {
+    const originalSetTimeout = globalThis.setTimeout;
+    const originalClearTimeout = globalThis.clearTimeout;
+    const scheduled = new Map();
+    let nextTimerId = 0;
+    let renderCount = 0;
+
+    globalThis.setTimeout = (callback, delay) => {
+        const id = ++nextTimerId;
+        scheduled.set(id, { callback, delay });
+        return id;
+    };
+    globalThis.clearTimeout = (id) => scheduled.delete(id);
+
+    try {
+        const preview = Object.assign(createPreview(), {
+            renderPreview() { renderCount++; },
+        });
+
+        preview.schedulePreviewRender();
+        preview.schedulePreviewRender();
+
+        assert.equal(scheduled.size, 1);
+        const [timer] = scheduled.values();
+        assert.equal(timer.delay, 120);
+        assert.equal(renderCount, 0);
+
+        timer.callback();
+        assert.equal(renderCount, 1);
+    } finally {
+        globalThis.setTimeout = originalSetTimeout;
+        globalThis.clearTimeout = originalClearTimeout;
+    }
+});
+
+test('an immediate preview render cancels a pending debounced render', () => {
+    const originalSetTimeout = globalThis.setTimeout;
+    const originalClearTimeout = globalThis.clearTimeout;
+    const scheduled = new Map();
+    let nextTimerId = 0;
+    let renderCount = 0;
+
+    globalThis.setTimeout = (callback, delay) => {
+        const id = ++nextTimerId;
+        scheduled.set(id, { callback, delay });
+        return id;
+    };
+    globalThis.clearTimeout = (id) => scheduled.delete(id);
+
+    try {
+        const preview = Object.assign(createPreview(), {
+            noteContent: '',
+            clearMarkmap() {},
+        });
+        preview.schedulePreviewRender();
+        preview.renderPreview();
+
+        assert.equal(scheduled.size, 0);
+    } finally {
+        globalThis.setTimeout = originalSetTimeout;
+        globalThis.clearTimeout = originalClearTimeout;
+    }
+});
+
 test('Markmap rendering is debounced while note content changes', () => {
     const originalSetTimeout = globalThis.setTimeout;
     const originalClearTimeout = globalThis.clearTimeout;

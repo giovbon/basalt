@@ -1,3 +1,10 @@
+const INLINE_RENDER_THRESHOLD = 100_000;
+const MARKDOWN_BLOCK_START_RE = /^[ \t]{0,3}(?:#{1,6}[ \t]+|>|[-+*][ \t]+|\d+[.)][ \t]+|`{3,}|~{3,}|<\/?(?:address|article|aside|blockquote|div|dl|fieldset|figure|footer|form|h[1-6]|header|hr|iframe|main|nav|ol|p|pre|section|script|style|table|ul)\b)/im;
+const MARKDOWN_BLOCK_RULE_RE = /^[ \t]{0,3}(?:={2,}|(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})[ \t]*$/m;
+const MARKDOWN_TABLE_ROW_RE = /^[ \t]*\|.*(?:\||$)/m;
+const MARKDOWN_TABLE_DIVIDER_RE = /^[ \t]*:?-{1,}:?[ \t]*\|(?:[ \t]*:?-{1,}:?[ \t]*\|?)+[ \t]*$/m;
+const MARKDOWN_REFERENCE_RE = /^[ \t]{0,3}\[[^\]]+\]:[ \t]/m;
+
 // Synchronous markdown rendering pipeline for the preview pane.
 //
 // Extracted from the getter in preview.js so it can be unit tested without
@@ -155,6 +162,10 @@ export function renderMarkdownSync({
     // Step 1: Temporarily replace code blocks and inline code with rendered
     // HTML so note/media link substitutions do not modify their contents.
     const codeBlocks = [];
+    const preserveRenderedHtml = (html) => {
+        codeBlocks.push(html);
+        return `\x00CODEBLOCK${codeBlocks.length - 1}\x00`;
+    };
     contentToRender = contentToRender.replace(/```[\s\S]*?```/g, (match) => {
         codeBlocks.push(typeof marked !== 'undefined'
             ? marked.parse(match, { async: false })
@@ -224,11 +235,10 @@ export function renderMarkdownSync({
             const resolved = resolveWikiLink(linkTarget, currentNote ? currentNote.split('/').slice(0, -1).join('/') : '');
             if (resolved) {
                 const safeDisplay = display.replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>');
-                return `<a href="/${resolved}" class="wikilink" data-wikilink="${linkTarget.replace(/"/g, '"')}">${safeDisplay}</a>`;
+                return preserveRenderedHtml(`<a href="/${resolved}" class="wikilink" data-wikilink="${linkTarget.replace(/"/g, '"')}">${safeDisplay}</a>`);
             }
             const safeDisplay = display.replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>');
-            const safeTarget = linkTarget.replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>');
-            return `<span class="wikilink-broken" title="Note not found">${safeDisplay}</span>`;
+            return preserveRenderedHtml(`<span class="wikilink-broken" title="Note not found">${safeDisplay}</span>`);
         }
     );
 
@@ -264,7 +274,18 @@ export function renderMarkdownSync({
             };
             options.renderer = renderer;
         }
-        html = marked.parse(contentToRender, options);
+        const isOneLargeParagraph = contentToRender.length >= INLINE_RENDER_THRESHOLD
+            && !/\n[ \t]*\r?\n/.test(contentToRender)
+            && !MARKDOWN_BLOCK_START_RE.test(contentToRender)
+            && !MARKDOWN_BLOCK_RULE_RE.test(contentToRender)
+            && !MARKDOWN_TABLE_ROW_RE.test(contentToRender)
+            && !MARKDOWN_TABLE_DIVIDER_RE.test(contentToRender)
+            && !MARKDOWN_REFERENCE_RE.test(contentToRender)
+            && !/^[ \t]{0,3}<!--/m.test(contentToRender)
+            && !/<!--CODEBLOCK\d+-->/.test(contentToRender);
+        html = isOneLargeParagraph && typeof marked.parseInline === 'function'
+            ? `<p>${marked.parseInline(contentToRender, options)}</p>\n`
+            : marked.parse(contentToRender, options);
     } else {
         html = contentToRender; // fallback if marked not loaded yet
     }

@@ -157,12 +157,12 @@ export function createBootstrap() {
                     });
                 }
                 // Re-render the markdown preview when content changes
-                this.renderPreview();
+                this.schedulePreviewRender();
             });
             
             // Re-render preview when the note changes (e.g., user navigates)
             this.$watch('currentNote', () => {
-                this.renderPreview();
+                this.schedulePreviewRender();
             });
             
             // Watch favorites expanded state and save to localStorage
@@ -201,18 +201,23 @@ export function createBootstrap() {
                         this.createFolder();
                     }
                     
-                    // Ctrl/Cmd + Z for undo
-                    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
+                    const target = e.target;
+                    const isOtherEditableTarget = target?.isContentEditable
+                        || (['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName)
+                            && !(target.tagName === 'TEXTAREA' && target.id === 'note-editor'));
+
+                    // Keep the browser's native undo/redo for other editable fields.
+                    if (!isOtherEditableTarget && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
                         e.preventDefault();
                         this.undo();
                     }
                     
                     // Ctrl/Cmd + Y OR Ctrl/Cmd+Shift+Z for redo
-                    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+                    if (!isOtherEditableTarget && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
                         e.preventDefault();
                         this.redo();
                     }
-                    if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
+                    if (!isOtherEditableTarget && (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
                         e.preventDefault();
                         this.redo();
                     }

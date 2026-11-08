@@ -9,6 +9,7 @@
   "scripts": {
     "build": "bash ../../build-js.sh",
     "test": "node --test",
+    "test:performance": "node bench/editor-performance.mjs",
     "test:e2e": "playwright test"
   },
   "devDependencies": {

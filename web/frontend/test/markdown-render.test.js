@@ -117,6 +117,43 @@ test('broken wikilinks get broken class', () => {
     assert.match(html, /Missing/);
 });
 
+test('preserves many rendered wikilinks through Markdown parsing', () => {
+    const count = 1_000;
+    const content = Array.from({ length: count }, (_, index) => `[[Note ${index}]]`).join(' ');
+    const html = renderMarkdownSync({
+        noteContent: content,
+        currentNote: '',
+        ...makeMockDeps({ resolveWikiLink: (target) => target.replaceAll(' ', '-') }),
+    });
+
+    assert.equal((html.match(/class="wikilink"/g) || []).length, count);
+    assert.match(html, /href="\/Note-0"/);
+    assert.match(html, /href="\/Note-999"/);
+});
+
+test('uses inline parsing for an oversized single paragraph and restores wikilinks', () => {
+    const originalParseInline = globalThis.marked.parseInline;
+    const count = 8_000;
+    const noteContent = 'A long line with [[Note]].\n'.repeat(count);
+    let parsedSource = '';
+    globalThis.marked.parseInline = (source) => {
+        parsedSource = source;
+        return source;
+    };
+
+    try {
+        const html = renderMarkdownSync({ noteContent, ...makeMockDeps() });
+
+        assert.ok(parsedSource.length >= 100_000);
+        assert.doesNotMatch(parsedSource, /\[\[Note\]\]/);
+        assert.equal((html.match(/class="wikilink-broken"/g) || []).length, count);
+        assert.match(html, /^<p>A long line with <span class="wikilink-broken"/);
+    } finally {
+        if (originalParseInline === undefined) delete globalThis.marked.parseInline;
+        else globalThis.marked.parseInline = originalParseInline;
+    }
+});
+
 test('media wikilinks produce img tags', () => {
     const deps = makeMockDeps({
         resolveMediaWikilink: (name) => name === 'image.png' ? 'attachments/image.png' : null,

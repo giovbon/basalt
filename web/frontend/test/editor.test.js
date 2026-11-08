@@ -305,3 +305,80 @@ test('a normal delimiter still keeps the wrapped text selected', () => {
         ctx.restore();
     }
 });
+
+test('undo and redo restore committed content and caret positions in order', () => {
+    const ctx = makeEditorComponent('start', 5, 5);
+    const originalSetTimeout = globalThis.setTimeout;
+    const callbacks = [];
+
+    globalThis.setTimeout = (callback) => {
+        callbacks.push(callback);
+        return callbacks.length;
+    };
+
+    try {
+        const { component, editor } = ctx;
+        component.currentNote = 'note.md';
+        component.undoHistory = [{ content: 'start', cursorPos: 5 }];
+        component.saveNote = () => {};
+        component.updateSyntaxHighlight = () => {};
+
+        const commit = (content) => {
+            component.noteContent = content;
+            editor.selectionStart = content.length;
+            component.pushToHistory();
+            component.commitToHistory();
+        };
+        const applyAndRestoreCursor = (action, expectedContent, expectedCursor) => {
+            action();
+            assert.equal(component.noteContent, expectedContent);
+            callbacks.shift()();
+            assert.equal(editor.selectionStart, expectedCursor);
+        };
+
+        commit('start one');
+        commit('start one two');
+
+        applyAndRestoreCursor(() => component.undo(), 'start one', 9);
+        applyAndRestoreCursor(() => component.undo(), 'start', 5);
+        applyAndRestoreCursor(() => component.redo(), 'start one', 9);
+        applyAndRestoreCursor(() => component.redo(), 'start one two', 13);
+
+        assert.equal(component.redoHistory.length, 0);
+    } finally {
+        globalThis.setTimeout = originalSetTimeout;
+        ctx.restore();
+    }
+});
+
+test('a new committed edit after undo clears the redo branch', () => {
+    const ctx = makeEditorComponent('x', 1, 1);
+    const originalSetTimeout = globalThis.setTimeout;
+
+    globalThis.setTimeout = () => 1;
+    try {
+        const { component, editor } = ctx;
+        component.currentNote = 'note.md';
+        component.undoHistory = [{ content: 'x', cursorPos: 1 }];
+        component.saveNote = () => {};
+        component.updateSyntaxHighlight = () => {};
+
+        component.noteContent = 'xy';
+        editor.selectionStart = 2;
+        component.pushToHistory();
+        component.commitToHistory();
+        component.undo();
+
+        component.noteContent = 'xz';
+        editor.selectionStart = 2;
+        component.pushToHistory();
+        component.commitToHistory();
+        component.redo();
+
+        assert.equal(component.noteContent, 'xz');
+        assert.equal(component.redoHistory.length, 0);
+    } finally {
+        globalThis.setTimeout = originalSetTimeout;
+        ctx.restore();
+    }
+});

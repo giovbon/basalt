@@ -19,6 +19,7 @@ import { typeIconSvg } from '../lib/file-icons.js';
 const MARKMAP_RENDER_DEBOUNCE_MS = 500;
 const MAX_DATAVIEW_QUERIES_PER_NOTE = 5;
 const DATAVIEW_QUERY_DEBOUNCE_MS = 300;
+const PREVIEW_RENDER_DEBOUNCE_MS = 120;
 const HIGHLIGHT_JS_LANGUAGES = [
     'csharp', 'python', 'bash', 'shell', 'powershell', 'javascript',
     'typescript', 'json', 'sql', 'yaml', 'css', 'http',
@@ -448,9 +449,24 @@ export function createPreview() {
             return this._cachedRenderedHTML || '<p style="color: var(--text-tertiary);">Nothing to preview yet...</p>';
         },
 
+        schedulePreviewRender() {
+            if (this._previewRenderTimeout != null) {
+                clearTimeout(this._previewRenderTimeout);
+            }
+            this._previewRenderTimeout = setTimeout(() => {
+                this._previewRenderTimeout = null;
+                this.renderPreview();
+            }, PREVIEW_RENDER_DEBOUNCE_MS);
+        },
+
         // Synchronous markdown rendering + DOM post-processing setup.
         // Call this when noteContent or currentNote changes.
         renderPreview() {
+            if (this._previewRenderTimeout != null) {
+                clearTimeout(this._previewRenderTimeout);
+                this._previewRenderTimeout = null;
+            }
+
             const queryGeneration = (this._queryRenderGeneration || 0) + 1;
             this._queryRenderGeneration = queryGeneration;
             if (this._dataviewQueryTimeout) {
