@@ -126,6 +126,7 @@ func parseTodoKeywords(values []string) ([]todoKeyword, error) {
 			if name == "" {
 				continue
 			}
+			name = strings.ToUpper(name)
 			key := strings.ToLower(name)
 			if seen[key] {
 				continue
@@ -136,7 +137,7 @@ func parseTodoKeywords(values []string) ([]todoKeyword, error) {
 			seen[key] = true
 			keywords = append(keywords, todoKeyword{
 				name:    name,
-				pattern: regexp.MustCompile("(?i)" + regexp.QuoteMeta(name) + ":"),
+				pattern: regexp.MustCompile(regexp.QuoteMeta(name) + ":"),
 			})
 		}
 	}
