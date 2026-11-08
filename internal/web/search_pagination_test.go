@@ -42,6 +42,7 @@ func TestSearchPaginationKeepsTotals(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		req := httptest.NewRequest("POST", fmt.Sprintf("/api/notes/nota-%d.md", i), bytes.NewBuffer(body))
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
@@ -99,5 +100,49 @@ func TestSearchPaginationKeepsTotals(t *testing.T) {
 	// Every matched note is counted even when the first page fills up early.
 	if first.Results[0].TotalMatches != 1 {
 		t.Errorf("total_matches = %d, want 1", first.Results[0].TotalMatches)
+	}
+}
+
+func TestSearchWholeWordIsDefaultAndCanBeDisabled(t *testing.T) {
+	s := newSearchTestRouter(t)
+	for path, content := range map[string]string{
+		"match.md":     "# ESM\n",
+		"substring.md": "# mesma\n",
+	} {
+		body, err := json.Marshal(SaveNotePayload{Content: content})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest("POST", "/api/notes/"+path, bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		s.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("create %s: status = %d: %s", path, rec.Code, rec.Body.String())
+		}
+	}
+
+	search := func(query string) SearchResponse {
+		t.Helper()
+		req := httptest.NewRequest("GET", "/api/search?q=ESM"+query, nil)
+		rec := httptest.NewRecorder()
+		s.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("search: status = %d: %s", rec.Code, rec.Body.String())
+		}
+		var resp SearchResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode search response: %v", err)
+		}
+		return resp
+	}
+
+	exact := search("")
+	if len(exact.Results) != 1 || exact.Results[0].Path != "match.md" {
+		t.Errorf("default exact results = %#v, want only match.md", exact.Results)
+	}
+	partial := search("&whole_word=false")
+	if len(partial.Results) != 2 {
+		t.Errorf("substring result count = %d, want 2", len(partial.Results))
 	}
 }

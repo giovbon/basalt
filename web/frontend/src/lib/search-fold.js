@@ -6,6 +6,7 @@
 
 // Combining marks removed by foldForSearch (accent-insensitive matching).
 export const SEARCH_COMBINING_MARKS = /\p{M}/gu;
+const SEARCH_WORD_CHARACTER = /^[\p{L}\p{N}_]$/u;
 
 /**
  * Lowercase `text` and strip accents, also returning a byte-for-byte map from
@@ -58,6 +59,14 @@ export function foldedIndexForOriginal(map, origIndex) {
         }
     }
     return low;
+}
+
+/** Whether the character at start/end is separated from adjacent word characters. */
+export function isWholeWordMatch(text, start, end) {
+    const before = start > 0 ? Array.from(text.slice(0, start)).pop() : '';
+    const after = end < text.length ? Array.from(text.slice(end))[0] : '';
+    return (!before || !SEARCH_WORD_CHARACTER.test(before))
+        && (!after || !SEARCH_WORD_CHARACTER.test(after));
 }
 
 /** 0-based character offset where a 1-based source line starts. */

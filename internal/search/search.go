@@ -156,12 +156,42 @@ func FoldedMatchSpans(content string, foldedQuery string, limit int) []Span {
 // is positive, which lets callers show "showing N of M" without collecting
 // every snippet. If content is ASCII, it avoids per-character mapping.
 func FoldedMatchSpansWithCount(content string, foldedQuery string, limit int) ([]Span, int) {
+	return foldedMatchSpansWithCount(content, foldedQuery, limit, false)
+}
+
+// FoldedWordMatchSpansWithCount matches foldedQuery only when it is bounded by
+// non-word characters (or the start/end of content).
+func FoldedWordMatchSpansWithCount(content string, foldedQuery string, limit int) ([]Span, int) {
+	return foldedMatchSpansWithCount(content, foldedQuery, limit, true)
+}
+
+// ContainsWholeWord reports whether foldedQuery occurs in foldedContent as a
+// whole word. Both arguments must already be folded.
+func ContainsWholeWord(foldedContent, foldedQuery string) bool {
+	if foldedQuery == "" {
+		return false
+	}
+	pos := strings.Index(foldedContent, foldedQuery)
+	for pos != -1 {
+		if hasWordBoundaries(foldedContent, pos, pos+len(foldedQuery)) {
+			return true
+		}
+		next := pos + len(foldedQuery)
+		pos = strings.Index(foldedContent[next:], foldedQuery)
+		if pos != -1 {
+			pos += next
+		}
+	}
+	return false
+}
+
+func foldedMatchSpansWithCount(content string, foldedQuery string, limit int, wholeWord bool) ([]Span, int) {
 	if foldedQuery == "" || len(content) == 0 {
 		return nil, 0
 	}
 
 	if isASCIIContent(content) {
-		return spansInFolded(content, strings.ToLower(content), foldedQuery, limit, nil)
+		return spansInFolded(content, strings.ToLower(content), foldedQuery, limit, nil, wholeWord)
 	}
 
 	// Fold with origins: folded byte -> content byte offset of its origin
@@ -169,7 +199,7 @@ func FoldedMatchSpansWithCount(content string, foldedQuery string, limit int) ([
 	// table has to be built (it used to cost two slices the size of content).
 	var origins []int32
 	folded := foldNonASCII(content, &origins)
-	return spansInFolded(content, folded, foldedQuery, limit, origins)
+	return spansInFolded(content, folded, foldedQuery, limit, origins, wholeWord)
 }
 
 // FoldedMatchSpansInFolded is FoldedMatchSpansWithCount for callers that
@@ -177,15 +207,21 @@ func FoldedMatchSpansWithCount(content string, foldedQuery string, limit int) ([
 // directly; non-ASCII notes rebuild only the compact offset map. Either way the
 // note is never folded twice for a single search request.
 func FoldedMatchSpansInFolded(content, foldedContent, foldedQuery string, limit int) ([]Span, int) {
+	return FoldedMatchSpansInFoldedWithOptions(content, foldedContent, foldedQuery, limit, false)
+}
+
+// FoldedMatchSpansInFoldedWithOptions optionally requires matches to occupy a
+// whole word, reusing foldedContent when it matches content.
+func FoldedMatchSpansInFoldedWithOptions(content, foldedContent, foldedQuery string, limit int, wholeWord bool) ([]Span, int) {
 	if foldedQuery == "" || len(content) == 0 || len(foldedContent) == 0 {
 		return nil, 0
 	}
 
 	if isASCIIContent(content) {
 		if len(foldedContent) != len(content) {
-			return FoldedMatchSpansWithCount(content, foldedQuery, limit)
+			return foldedMatchSpansWithCount(content, foldedQuery, limit, wholeWord)
 		}
-		return spansInFolded(content, foldedContent, foldedQuery, limit, nil)
+		return spansInFolded(content, foldedContent, foldedQuery, limit, nil, wholeWord)
 	}
 
 	origins := foldOrigins(content)
@@ -193,41 +229,43 @@ func FoldedMatchSpansInFolded(content, foldedContent, foldedQuery string, limit 
 		// The cached fold does not match this content (the note changed after
 		// the scan). Fall back to a self-consistent fold rather than reporting
 		// spans against the wrong bytes.
-		return FoldedMatchSpansWithCount(content, foldedQuery, limit)
+		return foldedMatchSpansWithCount(content, foldedQuery, limit, wholeWord)
 	}
-	return spansInFolded(content, foldedContent, foldedQuery, limit, origins)
+	return spansInFolded(content, foldedContent, foldedQuery, limit, origins, wholeWord)
 }
 
 // spansInFolded finds foldedQuery in folded. A nil origins slice means folded
 // is 1:1 with content bytes (the ASCII fast path); otherwise each folded byte
 // maps to the content byte offset of the rune it came from.
-func spansInFolded(content, folded, foldedQuery string, limit int, origins []int32) ([]Span, int) {
+func spansInFolded(content, folded, foldedQuery string, limit int, origins []int32, wholeWord bool) ([]Span, int) {
 	var spans []Span
 	total := 0
 	pos := strings.Index(folded, foldedQuery)
 	for pos != -1 {
-		total++
 		endPos := pos + len(foldedQuery)
+		if !wholeWord || hasWordBoundaries(folded, pos, endPos) {
+			total++
 
-		if limit <= 0 || len(spans) < limit {
-			if origins == nil {
-				spans = append(spans, Span{Start: pos, End: endPos})
-			} else {
-				startByte := int(origins[pos])
-				// Step over the last matched rune, then keep any combining
-				// accents attached to it in the span.
-				lastByte := int(origins[endPos-1])
-				_, size := utf8.DecodeRuneInString(content[lastByte:])
-				endByte := lastByte + size
-				for endByte < len(content) {
-					r, sz := utf8.DecodeRuneInString(content[endByte:])
-					if !unicode.Is(unicode.Mn, r) {
-						break
+			if limit <= 0 || len(spans) < limit {
+				if origins == nil {
+					spans = append(spans, Span{Start: pos, End: endPos})
+				} else {
+					startByte := int(origins[pos])
+					// Step over the last matched rune, then keep any combining
+					// accents attached to it in the span.
+					lastByte := int(origins[endPos-1])
+					_, size := utf8.DecodeRuneInString(content[lastByte:])
+					endByte := lastByte + size
+					for endByte < len(content) {
+						r, sz := utf8.DecodeRuneInString(content[endByte:])
+						if !unicode.Is(unicode.Mn, r) {
+							break
+						}
+						endByte += sz
 					}
-					endByte += sz
-				}
 
-				spans = append(spans, Span{Start: startByte, End: endByte})
+					spans = append(spans, Span{Start: startByte, End: endByte})
+				}
 			}
 		}
 
@@ -238,6 +276,26 @@ func spansInFolded(content, folded, foldedQuery string, limit int, origins []int
 	}
 
 	return spans, total
+}
+
+func isWordRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsNumber(r) || r == '_'
+}
+
+func hasWordBoundaries(text string, start, end int) bool {
+	if start > 0 {
+		r, _ := utf8.DecodeLastRuneInString(text[:start])
+		if isWordRune(r) {
+			return false
+		}
+	}
+	if end < len(text) {
+		r, _ := utf8.DecodeRuneInString(text[end:])
+		if isWordRune(r) {
+			return false
+		}
+	}
+	return true
 }
 
 // EscapeHTML escapes special characters with Python html.escape parity (including &#x27;)

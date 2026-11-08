@@ -197,7 +197,11 @@ export function createSidebar() {
             if (hasTextSearch) {
                 this.isSearching = true;
                 try {
-                    const data = await api.getJSON(`/api/search?q=${encodeURIComponent(this.searchQuery)}`);
+                    const params = new URLSearchParams({
+                        q: this.searchQuery,
+                        whole_word: String(this.exactSearchMatch),
+                    });
+                    const data = await api.getJSON(`/api/search?${params}`);
                     
                     // Apply tag filtering to search results if tags are selected
                     let results = data.results;
@@ -227,8 +231,10 @@ export function createSidebar() {
                     // itself, and running this pass again would reset it to
                     // the first match and scroll away from it.
                     if (this.currentNote && this.noteContent
-                        && (this.currentSearchHighlight || '') !== (this.searchQuery || '')) {
+                        && ((this.currentSearchHighlight || '') !== (this.searchQuery || '')
+                            || this.currentSearchExactMatch !== this.exactSearchMatch)) {
                         this.currentSearchHighlight = this.searchQuery;
+                        this.currentSearchExactMatch = this.exactSearchMatch;
                         this.$nextTick(() => {
                             this.highlightSearchTerm(this.searchQuery, false);
                         });

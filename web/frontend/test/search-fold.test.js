@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { foldForSearch, foldedIndexForOriginal, lineStartOffset } from '../src/lib/search-fold.js';
+import { foldForSearch, foldedIndexForOriginal, isWholeWordMatch, lineStartOffset } from '../src/lib/search-fold.js';
 
 test('ASCII text folds to lowercase with an identity map', () => {
     const { text, map } = foldForSearch('AbC');
@@ -51,4 +51,12 @@ test('lineStartOffset maps 1-based lines to character offsets', () => {
     assert.equal(lineStartOffset(content, 3), 14);
     assert.equal(lineStartOffset(content, 0), 0);
     assert.equal(lineStartOffset(content, 42), content.length, 'past the end clamps to length');
+});
+
+test('whole-word matching respects Unicode letters, digits, and underscores', () => {
+    assert.equal(isWholeWordMatch('mesma ESM', 6, 9), true);
+    assert.equal(isWholeWordMatch('mesma', 1, 4), false);
+    assert.equal(isWholeWordMatch('_ESM ESM2', 1, 4), false);
+    assert.equal(isWholeWordMatch('coração', 0, 7), true);
+    assert.equal(isWholeWordMatch('éESM', 1, 4), false);
 });

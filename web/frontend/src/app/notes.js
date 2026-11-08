@@ -133,6 +133,9 @@ export function createNotes() {
                     const params = new URLSearchParams();
                     if (searchQuery) {
                         params.set('search', searchQuery);
+                        if (!this.exactSearchMatch) {
+                            params.set('whole_word', 'false');
+                        }
                     }
                     if (targetLine) {
                         params.set('line', String(targetLine));
@@ -146,6 +149,7 @@ export function createNotes() {
                         { 
                             notePath: notePath, 
                             searchQuery: searchQuery,
+                            exactSearchMatch: this.exactSearchMatch,
                             targetLine: targetLine,
                             targetColumn: targetColumn,
                             homepageFolder: this.selectedHomepageFolder || '' // Save current folder state
@@ -161,9 +165,11 @@ export function createNotes() {
                 // Store search query for highlighting
                 if (searchQuery) {
                     this.currentSearchHighlight = searchQuery;
+                    this.currentSearchExactMatch = this.exactSearchMatch;
                 } else {
                     // Clear highlights if no search query
                     this.currentSearchHighlight = '';
+                    this.currentSearchExactMatch = this.exactSearchMatch;
                 }
                 
                 // Expand folder tree to show the loaded note

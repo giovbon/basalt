@@ -276,6 +276,8 @@
     "failed_media": "Falha ao mover o arquivo de mídia."
   },
   "search": {
+    "exact_match_on": "Correspondência por palavra inteira ativada; clique para buscar trechos",
+    "exact_match_off": "Busca por trechos ativada; clique para exigir palavra inteira",
     "previous": "Anterior (Shift+F3)",
     "next": "Próximo (F3)",
     "matches": "{{current}} de {{total}}",

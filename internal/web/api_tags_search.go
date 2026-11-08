@@ -162,6 +162,7 @@ func (h *TagsSearchHandler) SearchNotes(w http.ResponseWriter, r *http.Request) 
 		})
 		return
 	}
+	wholeWord := r.URL.Query().Get("whole_word") != "false"
 
 	notes, _, err := h.vault.ScanNotes(false)
 	if err != nil {
@@ -193,7 +194,11 @@ func (h *TagsSearchHandler) SearchNotes(w http.ResponseWriter, r *http.Request) 
 		if err != nil {
 			continue
 		}
-		if !strings.Contains(folded, foldedQuery) {
+		if wholeWord {
+			if !search.ContainsWholeWord(folded, foldedQuery) {
+				continue
+			}
+		} else if !strings.Contains(folded, foldedQuery) {
 			continue
 		}
 
@@ -210,7 +215,7 @@ func (h *TagsSearchHandler) SearchNotes(w http.ResponseWriter, r *http.Request) 
 			continue
 		}
 
-		spans, totalMatches := search.FoldedMatchSpansInFolded(content, folded, foldedQuery, maxSearchMatchesPerNote)
+		spans, totalMatches := search.FoldedMatchSpansInFoldedWithOptions(content, folded, foldedQuery, maxSearchMatchesPerNote, wholeWord)
 		if totalMatches == 0 {
 			continue
 		}

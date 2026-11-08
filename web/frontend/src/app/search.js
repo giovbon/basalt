@@ -4,7 +4,7 @@
 // this factory's object with the other feature slices (see compose()).
 
 import { CONFIG, LOCAL_SETTINGS } from '../core/config.js';
-import { foldForSearch, foldedIndexForOriginal, lineStartOffset } from '../lib/search-fold.js';
+import { foldForSearch, foldedIndexForOriginal, isWholeWordMatch, lineStartOffset } from '../lib/search-fold.js';
 import {
     previewMarkIndexForSourceOffset,
     searchHiddenRegions,
@@ -94,6 +94,7 @@ export function createSearch() {
                     const offset = this._sourceOffsetForLineColumn(content, targetLine, targetColumn);
                     const foldedIdx = this._foldedIndexForOriginal(foldedContent.map, offset);
                     if (foldedContent.text.startsWith(foldedTerm, foldedIdx)
+                        && (!this.exactSearchMatch || isWholeWordMatch(content, foldedContent.map[foldedIdx], foldedContent.map[foldedIdx + foldedTerm.length]))
                         && foldedContent.map[foldedIdx] < lineEnd) {
                         index = foldedIdx;
                         foundOnTargetLine = true;
@@ -101,10 +102,16 @@ export function createSearch() {
                 }
 
                 if (index === -1) {
-                    const candidate = foldedContent.text.indexOf(foldedTerm, foldedStart);
+                    let candidate = foldedContent.text.indexOf(foldedTerm, foldedStart);
+                    while (candidate !== -1 && foldedContent.map[candidate] < lineEnd
+                        && this.exactSearchMatch
+                        && !isWholeWordMatch(content, foldedContent.map[candidate], foldedContent.map[candidate + foldedTerm.length])) {
+                        candidate = foldedContent.text.indexOf(foldedTerm, candidate + foldedTerm.length);
+                    }
                     // Only accept the candidate when it actually starts on the
                     // requested line; otherwise the note changed since the search.
-                    if (candidate !== -1 && foldedContent.map[candidate] < lineEnd) {
+                    if (candidate !== -1 && foldedContent.map[candidate] < lineEnd
+                        && (!this.exactSearchMatch || isWholeWordMatch(content, foldedContent.map[candidate], foldedContent.map[candidate + foldedTerm.length]))) {
                         index = candidate;
                         foundOnTargetLine = true;
                     }
@@ -113,7 +120,12 @@ export function createSearch() {
             // Fall back to the first occurrence when the requested line has no
             // match (e.g. the line number came from a different revision).
             if (index === -1) {
-                index = foldedContent.text.indexOf(foldedTerm);
+                let candidate = foldedContent.text.indexOf(foldedTerm);
+                while (candidate !== -1 && this.exactSearchMatch
+                    && !isWholeWordMatch(content, foldedContent.map[candidate], foldedContent.map[candidate + foldedTerm.length])) {
+                    candidate = foldedContent.text.indexOf(foldedTerm, candidate + foldedTerm.length);
+                }
+                index = candidate;
             }
 
             let targetScroll = null;
@@ -198,6 +210,10 @@ export function createSearch() {
                 while ((index = foldedText.text.indexOf(foldedTerm, searchFrom)) !== -1) {
                     const start = foldedText.map[index];
                     const end = foldedText.map[index + foldedTerm.length];
+                    if (this.exactSearchMatch && !isWholeWordMatch(text, start, end)) {
+                        searchFrom = index + foldedTerm.length;
+                        continue;
+                    }
                     
                     // Add text before match
                     if (start > lastOriginal) {
@@ -524,6 +540,11 @@ export function createSearch() {
             // them; without it the first match on the line would be picked.
             const column = match && match.column ? match.column : null;
             this.openItem(path, 'note', query, line, column);
+        },
+
+        toggleExactSearchMatch() {
+            this.exactSearchMatch = !this.exactSearchMatch;
+            this.debouncedSearchNotes();
         },
     };
 }

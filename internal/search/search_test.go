@@ -37,6 +37,20 @@ func TestFoldedMatchSpansAccentInsensitive(t *testing.T) {
 	}
 }
 
+func TestFoldedWordMatchSpansWithCountRequiresWordBoundaries(t *testing.T) {
+	content := "mesma (ESM), _ESM ESM2; coração"
+	spans, total := FoldedWordMatchSpansWithCount(content, Fold("esm"), 0)
+	if total != 1 || len(spans) != 1 {
+		t.Fatalf("total/spans = %d/%d, want 1/1", total, len(spans))
+	}
+	if got := content[spans[0].Start:spans[0].End]; got != "ESM" {
+		t.Errorf("matched text = %q, want ESM", got)
+	}
+	if !ContainsWholeWord(FoldContent("uma palavra: café."), Fold("cafe")) {
+		t.Error("accent-insensitive whole-word match was not found")
+	}
+}
+
 // TestFoldContentMatchesSpanExtraction pins the invariant search relies on:
 // the cached FoldContent text gates which notes get their spans extracted, so
 // it must agree with FoldedMatchSpansWithCount in both directions — a miss

@@ -46,6 +46,8 @@ export function createState() {
         noteContent: '',
         viewMode: 'split', // 'edit', 'split', 'preview'
         searchQuery: '',
+        exactSearchMatch: true,
+        currentSearchExactMatch: true,
         todoKeywords: 'TODO, FIXME, LATER',
         todoKeywordsSaving: false,
         todos: [],

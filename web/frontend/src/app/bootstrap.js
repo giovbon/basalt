@@ -65,6 +65,7 @@ export function createBootstrap() {
                     const searchQuery = e.state.searchQuery || '';
                     const targetLine = e.state.targetLine || null;
                     const targetColumn = e.state.targetColumn || null;
+                    this.exactSearchMatch = e.state.exactSearchMatch !== false;
                     this.loadNote(e.state.notePath, false, searchQuery, targetLine, targetColumn); // false = don't update history
                     
                     // Update search box and trigger search if needed
@@ -788,6 +789,7 @@ export function createBootstrap() {
                 // Parse query string for search parameter and optional line anchor
                 const urlParams = new URLSearchParams(window.location.search);
                 const searchParam = urlParams.get('search');
+                this.exactSearchMatch = urlParams.get('whole_word') !== 'false';
                 const lineParam = parseInt(urlParams.get('line') || '', 10);
                 const targetLine = Number.isFinite(lineParam) && lineParam > 0 ? lineParam : null;
                 const colParam = parseInt(urlParams.get('col') || '', 10);
