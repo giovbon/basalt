@@ -219,7 +219,7 @@ temporário (Playwright + Chromium):
 
 ```bash
 cd web/frontend
-npm install
+npm ci
 npx playwright install chromium   # uma vez
 npm run test:e2e
 ```

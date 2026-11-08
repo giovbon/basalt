@@ -12,6 +12,31 @@ const PIXEL_PNG = Buffer.from(
   'base64',
 );
 
+const WELCOME_NOTE = [
+  '# Welcome',
+  '',
+  'This is the end-to-end test vault.',
+  '',
+  '- [ ] first task',
+  '- [x] finished task',
+  '',
+  'Read [[Roadmap]] for the plan.',
+  '',
+  '## Details',
+  '',
+  'Some body text used by the search smoke test.',
+].join('\n') + '\n';
+
+async function restoreWelcomeNote(page) {
+  const saved = page.waitForResponse((response) =>
+    response.url().includes('/api/notes/Welcome.md')
+      && response.request().method() === 'POST'
+      && response.ok()
+  );
+  await page.locator('#note-editor').fill(WELCOME_NOTE);
+  await saved;
+}
+
 test.describe.configure({ mode: 'serial' });
 
 test.beforeEach(async ({ page }) => {
@@ -24,6 +49,26 @@ test('boots on the homepage and lists the vault', async ({ page }) => {
   await expect(page.locator('[data-testid="homepage-note"][data-path="Welcome.md"]')).toBeVisible();
   await expect(page.locator('[data-testid="homepage-note"][data-path="Ideas.md"]')).toBeVisible();
   await expect(page.locator('.folder-item[data-path="Projects"]')).toBeVisible();
+});
+
+test('loads Highlight.js only when a note contains a code block', async ({ page }) => {
+  const highlightRequests = [];
+  page.on('request', (request) => {
+    if (/\/vendor\/highlight\.js\/(?:highlight\.min\.js|languages\/)/.test(request.url())) {
+      highlightRequests.push(request.url());
+    }
+  });
+
+  await page.reload();
+  await page.locator('.note-item[data-path="Welcome.md"]').click();
+  await expect(page.locator('#note-editor')).toHaveValue(/This is the end-to-end test vault/);
+  expect(highlightRequests).toHaveLength(0);
+
+  await page.locator('#note-editor').fill('```javascript\nconst answer = 42;\n```');
+  await expect(page.locator('[data-testid="preview"] pre code.hljs')).toContainText('42');
+  await expect.poll(() => highlightRequests.length).toBeGreaterThan(0);
+
+  await restoreWelcomeNote(page);
 });
 
 test('opens a note from the sidebar and renders the preview', async ({ page }) => {
@@ -61,6 +106,7 @@ test('renders query blocks and filters notes by frontmatter tags', async ({ page
   await page.locator('#note-editor').fill(`${source}\nMore text`);
   await expect(preview.locator('table.basalt-query-table')).toBeVisible();
   await expect(preview.locator('pre code')).toHaveCount(0);
+  await restoreWelcomeNote(page);
 });
 
 test('searches the vault and opens a match', async ({ page }) => {

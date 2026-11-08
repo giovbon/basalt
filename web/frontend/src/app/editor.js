@@ -217,7 +217,15 @@ export function createEditor() {
             if (!this.syntaxHighlightEnabled) return;
             
             clearTimeout(this.syntaxHighlightTimeout);
-            this.syntaxHighlightTimeout = setTimeout(() => {
+            this.syntaxHighlightTimeout = setTimeout(async () => {
+                if (!globalThis.hljs && /^[ \t]{0,3}`{3,}/m.test(this.noteContent)) {
+                    try {
+                        await this.loadHighlightJs();
+                    } catch (error) {
+                        console.error('Highlight.js failed to load:', error);
+                        return;
+                    }
+                }
                 const overlay = document.getElementById('syntax-overlay');
                 if (overlay) {
                     overlay.innerHTML = this.highlightMarkdown(this.noteContent);

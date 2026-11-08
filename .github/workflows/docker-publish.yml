@@ -39,6 +39,12 @@ jobs:
           npm ci --prefix web/frontend
           npm test --prefix web/frontend
 
+      - name: Install Playwright browser
+        run: npx --prefix web/frontend playwright install --with-deps chromium
+
+      - name: Frontend end-to-end tests
+        run: npm run test:e2e --prefix web/frontend
+
       - name: Check generated frontend artifacts
         run: |
           bash build-js.sh

@@ -19,9 +19,40 @@ import { typeIconSvg } from '../lib/file-icons.js';
 const MARKMAP_RENDER_DEBOUNCE_MS = 500;
 const MAX_DATAVIEW_QUERIES_PER_NOTE = 5;
 const DATAVIEW_QUERY_DEBOUNCE_MS = 300;
+const HIGHLIGHT_JS_LANGUAGES = [
+    'csharp', 'python', 'bash', 'shell', 'powershell', 'javascript',
+    'typescript', 'json', 'sql', 'yaml', 'css', 'http',
+];
+let highlightJsLoadPromise = null;
+
+function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Failed to load ${src}`));
+        document.head.appendChild(script);
+    });
+}
 
 export function createPreview() {
     return {
+
+        loadHighlightJs() {
+            if (globalThis.hljs) return Promise.resolve(globalThis.hljs);
+            if (!highlightJsLoadPromise) {
+                highlightJsLoadPromise = loadScript('/static/vendor/highlight.js/highlight.min.js')
+                    .then(() => Promise.all(HIGHLIGHT_JS_LANGUAGES.map((language) =>
+                        loadScript(`/static/vendor/highlight.js/languages/${language}.min.js`)
+                    )))
+                    .then(() => globalThis.hljs)
+                    .catch((error) => {
+                        highlightJsLoadPromise = null;
+                        throw error;
+                    });
+            }
+            return highlightJsLoadPromise;
+        },
         
         // Highlight markdown syntax
         highlightMarkdown(text) {
@@ -542,15 +573,24 @@ export function createPreview() {
             setTimeout(() => {
                 const previewEl = this._domCache.previewContent || document.querySelector('.markdown-preview');
                 if (previewEl) {
-                    previewEl.querySelectorAll('pre code:not(.language-mermaid)').forEach((block) => {
-                        if (!block.classList.contains('hljs')) {
-                            hljs.highlightElement(block);
-                        }
+                    const codeBlocks = [...previewEl.querySelectorAll('pre code:not(.language-mermaid)')];
+                    codeBlocks.forEach((block) => {
                         const pre = block.parentElement;
                         if (pre && !pre.querySelector('.copy-code-button')) {
                             this.addCopyButtonToCodeBlock(pre);
                         }
                     });
+                    if (codeBlocks.length) {
+                        this.loadHighlightJs().then((highlighter) => {
+                            codeBlocks.forEach((block) => {
+                                if (block.isConnected && !block.classList.contains('hljs')) {
+                                    highlighter.highlightElement(block);
+                                }
+                            });
+                        }).catch((error) => {
+                            console.error('Highlight.js failed to load:', error);
+                        });
+                    }
 
                     if (!this._initializedVideoSources) this._initializedVideoSources = new Set();
                     previewEl.querySelectorAll('video[preload="none"]').forEach((video) => {
