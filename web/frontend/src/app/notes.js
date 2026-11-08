@@ -203,18 +203,6 @@ export function createNotes() {
                             });
                         }
 
-                        // Apply or clear search highlighting
-                        if (searchQuery) {
-                            // Pass true to focus editor when loading from search result
-                            this.highlightSearchTerm(searchQuery, true, targetLine, targetColumn);
-                        } else if (targetLine) {
-                            this.scrollEditorToLine(targetLine);
-                            this.scrollPreviewToSourceLine(targetLine);
-                            this.clearSearchHighlights();
-                        } else {
-                            this.clearSearchHighlights();
-                        }
-                        
                         // Scroll note into view in sidebar if needed
                         this.scrollNoteIntoView(notePath);
                         
@@ -223,6 +211,26 @@ export function createNotes() {
                         
                         // Render markdown preview
                         this.renderPreview();
+
+                        // x-html updates the preview after Alpine's next tick.
+                        // Apply search marks and scroll only after that DOM is in
+                        // place, or the search result targets the previous note.
+                        this.$nextTick(() => {
+                            requestAnimationFrame(() => {
+                                if (this.currentNote !== notePath
+                                    || this.currentSearchHighlight !== searchQuery) return;
+
+                                if (searchQuery) {
+                                    this.highlightSearchTerm(searchQuery, true, targetLine, targetColumn);
+                                } else if (targetLine) {
+                                    this.scrollEditorToLine(targetLine);
+                                    this.scrollPreviewToSourceLine(targetLine);
+                                    this.clearSearchHighlights();
+                                } else {
+                                    this.clearSearchHighlights();
+                                }
+                            });
+                        });
                     });
                 });
                 

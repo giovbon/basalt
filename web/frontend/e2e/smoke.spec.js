@@ -110,6 +110,9 @@ test('renders query blocks and filters notes by frontmatter tags', async ({ page
 });
 
 test('searches the vault and opens a match', async ({ page }) => {
+  await page.locator('.note-item[data-path="Welcome.md"]').click();
+  await page.locator('.mobile-toolbar button.seg-btn').nth(2).click();
+
   await page.locator('[data-testid="rail-search"]').click();
   await page.locator('[data-testid="search-input"]').fill('Ship');
 
@@ -120,6 +123,19 @@ test('searches the vault and opens a match', async ({ page }) => {
 
   await expect(page.locator('#note-editor')).toHaveValue(/Ship the smoke tests/);
   await expect(page).toHaveURL(/\/Projects\/Roadmap(\?.*)?$/);
+  const preview = page.locator('[data-testid="preview"]');
+  const activeMatch = preview.locator('mark.search-highlight.active-match');
+  await expect(activeMatch).toHaveText('Ship');
+  await expect.poll(() => preview.evaluate((element) => element.parentElement.scrollTop))
+    .toBeGreaterThan(0);
+  const matchPosition = await activeMatch.evaluate((element) => {
+    const pane = element.closest('[data-testid="preview"]').parentElement;
+    const matchRect = element.getBoundingClientRect();
+    const paneRect = pane.getBoundingClientRect();
+    return { top: matchRect.top, paneTop: paneRect.top, paneBottom: paneRect.bottom };
+  });
+  expect(matchPosition.top).toBeGreaterThanOrEqual(matchPosition.paneTop);
+  expect(matchPosition.top).toBeLessThan(matchPosition.paneBottom);
 });
 
 test('expands TODOs by note and opens the highlighted occurrence', async ({ page }) => {
