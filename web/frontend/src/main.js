@@ -17,6 +17,7 @@ import { createEditor } from './app/editor.js';
 import { createLinkPreview } from './app/link-preview.js';
 import { createHomepage } from './app/homepage.js';
 import { createSidebar } from './app/sidebar.js';
+import { createFileTree } from './app/file-tree.js';
 import { createUi } from './app/ui.js';
 import { createPanelScope } from './app/panel-scope.js';
 
@@ -47,6 +48,7 @@ function noteApp() {
         createLinkPreview(),
         createHomepage(),
         createSidebar(),
+        createFileTree(),
         createUi(),
     );
 }

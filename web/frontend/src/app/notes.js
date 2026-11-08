@@ -512,6 +512,80 @@ export function createNotes() {
                 await this.loadNotes({ silent: true });
             }
         },
+
+        async deleteSelectedTreeItems() {
+            if (this.deletingSelectedTreeItems || this.selectedTreeItems.length === 0) return;
+
+            const selectedItems = [...this.selectedTreeItems];
+            const items = selectedItems.filter(item => !selectedItems.some(folder =>
+                folder.type === 'folder' && folder.path !== item.path
+                && item.path.startsWith(folder.path + '/')
+            ));
+            const ok = await this.confirmModalAsk({
+                message: this.t('sidebar.confirm_delete_selected', { count: items.length }),
+            });
+            if (!ok) return;
+
+            this.deletingSelectedTreeItems = true;
+            const deletedItems = [];
+            const failedItems = [];
+            for (const item of items) {
+                try {
+                    const endpoint = item.type === 'folder' ? '/api/folders/' : '/api/notes/';
+                    await api.send(`${endpoint}${encodeVaultPath(item.path)}`, 'DELETE');
+                    deletedItems.push(item);
+                } catch (error) {
+                    failedItems.push({ ...item, error });
+                }
+            }
+
+            const deletedFolders = deletedItems.filter(item => item.type === 'folder');
+            const deletedFiles = deletedItems.filter(item => item.type !== 'folder');
+            for (const item of deletedFolders) {
+                this._optimisticRemoveFolderTree(item.path);
+                const prefix = item.path + '/';
+                this.expandedFolders.forEach(path => {
+                    if (path === item.path || path.startsWith(prefix)) this.expandedFolders.delete(path);
+                });
+            }
+            for (const item of deletedFiles) {
+                this._optimisticRemoveNote(item.path);
+            }
+
+            if (deletedItems.length > 0) {
+                const isDeletedPath = path => deletedFiles.some(item => item.path === path)
+                    || deletedFolders.some(item => path.startsWith(item.path + '/'));
+                const favorites = this.favorites.filter(path => !isDeletedPath(path));
+                if (favorites.length !== this.favorites.length) {
+                    this.favorites = favorites;
+                    this.favoritesSet = new Set(favorites);
+                    this.saveFavorites();
+                }
+
+                if (this.currentNote && isDeletedPath(this.currentNote)) {
+                    this._resetNoteState();
+                    window.history.replaceState({ homepageFolder: this.selectedHomepageFolder || '' }, '', '/');
+                } else if (this.currentMedia && isDeletedPath(this.currentMedia)) {
+                    this.closeMediaViewer();
+                    window.history.replaceState({ homepageFolder: this.selectedHomepageFolder || '' }, '', '/');
+                }
+
+                this._rebuildTreeAfterMutation();
+                await this.loadNotes({ silent: true });
+            }
+
+            this.selectedTreeItems = failedItems.map(({ path, type }) => ({ path, type }));
+            this.treeSelectionAnchor = failedItems.length > 0 ? this.treeSelectionAnchor : null;
+            this.treeSelectionMode = failedItems.length > 0;
+            if (failedItems.length > 0) {
+                const detail = failedItems[0].error.detail || failedItems[0].error.message;
+                this.toast(this.t('sidebar.bulk_delete_partial', {
+                    count: failedItems.length,
+                    error: detail,
+                }), { type: 'error' });
+            }
+            this.deletingSelectedTreeItems = false;
+        },
         
         // Auto-save with debounce
         autoSave() {
