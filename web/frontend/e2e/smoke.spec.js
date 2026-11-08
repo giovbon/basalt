@@ -34,6 +34,35 @@ test('opens a note from the sidebar and renders the preview', async ({ page }) =
   await expect(page).toHaveURL(/\/Welcome$/);
 });
 
+test('renders query blocks and filters notes by frontmatter tags', async ({ page }) => {
+  await page.locator('.note-item[data-path="Welcome.md"]').click();
+
+  const source = [
+    '---',
+    'tags: impacta',
+    '---',
+    'TODO: cagar',
+    '',
+    '',
+    '```query',
+    'type: table',
+    'where:',
+    '  tags: [impacta]',
+    '```',
+  ].join('\n');
+  await page.locator('#note-editor').fill(source);
+
+  const preview = page.locator('[data-testid="preview"]');
+  await expect(preview.locator('table.basalt-query-table')).toBeVisible();
+  await expect(preview.locator('table a.wikilink')).toHaveText('Welcome');
+  await expect(preview.locator('pre code')).toHaveCount(0);
+  await expect(preview.locator('table td').first()).toHaveCSS('padding', '4px 8px');
+
+  await page.locator('#note-editor').fill(`${source}\nMore text`);
+  await expect(preview.locator('table.basalt-query-table')).toBeVisible();
+  await expect(preview.locator('pre code')).toHaveCount(0);
+});
+
 test('searches the vault and opens a match', async ({ page }) => {
   await page.locator('[data-testid="rail-search"]').click();
   await page.locator('[data-testid="search-input"]').fill('Ship');

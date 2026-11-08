@@ -54,6 +54,117 @@ markmap:
 
 As cores do mapa acompanham o tema ativo, inclusive nos temas claros.
 
+### Consultas no Markdown
+
+Blocos `query` exibem resultados gerados a partir das notas do vault. `query` é
+o identificador recomendado; `basalt-query` também é aceito como alias. O
+conteúdo do bloco é YAML declarativo e nunca executa JavaScript:
+
+````markdown
+```query
+type: table
+from: Projetos
+where:
+  status: "em andamento"
+sort: due
+order: asc
+columns: [file.name, status, due]
+limit: 20
+```
+````
+
+#### Opções
+
+| Chave | Uso |
+| --- | --- |
+| `type` | Formato: `list`, `table` ou `task`. Obrigatório. |
+| `from` | Pasta do vault; inclui a pasta e suas subpastas. Omitir pesquisa o vault todo. |
+| `where` | Mapa de propriedades do frontmatter e/ou tags que a nota precisa corresponder. |
+| `sort` | Campo pelo qual ordenar; padrão `file.path`. |
+| `order` | `asc` ou `desc`; padrão `asc`. |
+| `columns` | Campos mostrados por `table`; padrão `file.name, file.modified`. Em `list`, o padrão é `file.name`; em `task`, `task.text, file.name`. |
+| `limit` | Número máximo de resultados; padrão 50, mínimo 1, máximo 100. |
+
+#### Campos disponíveis
+
+Campos de arquivo: `file.name`, `file.path`, `file.folder`, `file.modified`,
+`file.size` e `file.tags`. Também é possível usar qualquer chave do frontmatter,
+por exemplo `status`, `due` ou `project.owner`. Chaves são comparadas sem
+diferenciar maiúsculas de minúsculas. Os valores podem ser texto, números,
+booleanos ou listas desses valores.
+
+Uma condição `where` exige igualdade. Texto é comparado sem diferenciar
+maiúsculas de minúsculas; uma lista no frontmatter ou no filtro corresponde se
+qualquer valor for igual. Várias chaves em `where` são combinadas com **E**.
+Não há operadores de comparação (`>`, `<`), busca parcial, `OR`, agrupamento
+ou agregações neste MVP.
+
+#### Filtrar por tags
+
+Use `tags` ou `file.tags` em `where`. Tanto uma tag como uma lista de tags no
+filtro são aceitas; a lista significa “qualquer uma destas tags”:
+
+````markdown
+```query
+type: list
+where:
+  tags: leitura
+```
+````
+
+````markdown
+```query
+type: table
+where:
+  file.tags: [trabalho, urgente]
+columns: [file.name, file.tags, status]
+```
+````
+
+As tags vêm do `tags:` ou `tag:` no frontmatter e são normalizadas para
+minúsculas. Uma lista `where` não exige que todas as tags estejam presentes.
+Para exigir duas tags, escreva ambas como chaves:
+
+```yaml
+where:
+  tags: trabalho
+  status: ativo
+```
+
+#### Exemplos de tipos
+
+Listar notas de uma pasta com status ativo:
+
+````markdown
+```query
+type: list
+from: Projetos
+where:
+  status: ativo
+sort: due
+```
+````
+
+Exibir tarefas abertas ou concluídas encontradas nas notas que atendem aos
+filtros de frontmatter/tags:
+
+````markdown
+```query
+type: task
+from: Projetos
+where:
+  status: ativo
+```
+````
+
+`task` identifica itens Markdown no formato `- [ ] tarefa`, `* [x] tarefa` ou
+`+ [X] tarefa`. Seus campos de saída são `task.text` e `task.completed`.
+Blocos de código e o frontmatter não são interpretados como tarefas.
+
+Uma nota pode conter até cinco blocos de consulta; cada consulta aceita YAML
+de até 8 KiB. Resultados são recalculados ao renderizar o preview. Erros de
+sintaxe ou de execução são exibidos no lugar do resultado.
+
 ### Desenvolvimento: alterando a interface
 
 O JavaScript é modular: as fontes ficam em `web/frontend/src/` (ES modules) e

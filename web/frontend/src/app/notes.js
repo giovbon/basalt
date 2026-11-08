@@ -7,6 +7,7 @@ import { CONFIG, LOCAL_SETTINGS } from '../core/config.js';
 import { ErrorHandler, encodeVaultPath, FilenameValidator } from '../core/utils.js';
 import * as api from '../core/api.js';
 import { buildFolderTree, noteComparator, folderComparator } from '../lib/folder-tree.js';
+import { findDataviewQueries } from '../lib/dataview.js';
 import { createSaveController } from '../lib/save-controller.js';
 
 export function createNotes() {
@@ -677,6 +678,9 @@ export function createNotes() {
                 // Refresh TOC and metadata panels from the server-parsed response.
                 this.outline = result.outline || [];
                 this.noteMetadata = result.frontmatter || null;
+                if (content === this.noteContent && findDataviewQueries(content).length > 0) {
+                    this.renderPreview();
+                }
             }
             this.lastSaved = true;
 

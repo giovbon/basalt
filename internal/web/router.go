@@ -26,6 +26,7 @@ func NewServer(cfg *config.Config, v *vault.Vault, sess *session.Manager, assets
 	foldersH := NewFoldersHandler(cfg, v)
 	mediaH := NewMediaHandler(cfg, v)
 	tagsH := NewTagsSearchHandler(cfg, v)
+	queriesH := NewQueriesHandler(v)
 	sysH := NewSystemHandler(cfg, v, assetsFS, ntfyUpdater...)
 	staticH := NewStaticHandler(cfg, assetsFS)
 
@@ -66,6 +67,7 @@ func NewServer(cfg *config.Config, v *vault.Vault, sess *session.Manager, assets
 	mux.HandleFunc("GET /api/tags", tagsH.GetAllTags)
 	mux.HandleFunc("GET /api/tags/{tag}", tagsH.GetNotesByTag)
 	mux.HandleFunc("GET /api/search", tagsH.SearchNotes)
+	mux.HandleFunc("POST /api/query", queriesH.Run)
 	mux.HandleFunc("GET /api/todos", todosH.ListTodos)
 	mux.HandleFunc("POST /api/todos/config", todosH.UpdateKeywords)
 

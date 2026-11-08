@@ -6,11 +6,19 @@
 import * as api from '../core/api.js';
 import { encodeVaultPath } from '../core/utils.js';
 import { renderMarkdownSync } from '../lib/markdown-render.js';
+import {
+    findDataviewQueries,
+    previewSourceWithDataviewResults,
+    formatDataviewResult,
+    formatDataviewError,
+} from '../lib/dataview.js';
 import { isMarkmapNote } from '../lib/markmap-note.js';
 import { scanTaskLines, toggleTaskAt, setAllTasks } from '../lib/tasks.js';
 import { typeIconSvg } from '../lib/file-icons.js';
 
 const MARKMAP_RENDER_DEBOUNCE_MS = 500;
+const MAX_DATAVIEW_QUERIES_PER_NOTE = 5;
+const DATAVIEW_QUERY_DEBOUNCE_MS = 300;
 
 export function createPreview() {
     return {
@@ -36,7 +44,10 @@ export function createPreview() {
                     const codeHtml = canHighlight
                         ? highlighter.highlight(code, { language, ignoreIllegals: true }).value
                         : this.escapeHtml(code);
-                    const className = canHighlight ? 'md-codeblock hljs' : 'md-codeblock';
+                    const isQuery = language === 'query' || language === 'basalt-query';
+                    const className = isQuery
+                        ? 'md-queryblock'
+                        : (canHighlight ? 'md-codeblock hljs' : 'md-codeblock');
                     const block = this.escapeHtml(`${indent}${fence}${info}\n`)
                         + codeHtml
                         + (closingFence ? `\n${this.escapeHtml(`${closingIndent}${closingFence}`)}` : '');
@@ -409,6 +420,12 @@ export function createPreview() {
         // Synchronous markdown rendering + DOM post-processing setup.
         // Call this when noteContent or currentNote changes.
         renderPreview() {
+            const queryGeneration = (this._queryRenderGeneration || 0) + 1;
+            this._queryRenderGeneration = queryGeneration;
+            if (this._dataviewQueryTimeout) {
+                clearTimeout(this._dataviewQueryTimeout);
+                this._dataviewQueryTimeout = null;
+            }
             if (!this.noteContent) {
                 this.clearMarkmap();
                 this._cachedRenderedHTML = '<p style="color: var(--text-tertiary);">Nothing to preview yet...</p>';
@@ -426,8 +443,34 @@ export function createPreview() {
             this.clearMarkmap();
 
             // Build the synchronous HTML using the pure renderer
-            const html = renderMarkdownSync({
-                noteContent: this.noteContent,
+            const queryBlocks = findDataviewQueries(this.noteContent);
+            const previewSource = queryBlocks.length
+                ? previewSourceWithDataviewResults(
+                    this.noteContent,
+                    queryBlocks,
+                    this._dataviewResults || {},
+                )
+                : this.noteContent;
+            const html = this._renderMarkdownContent(previewSource);
+
+            // Cache immediately so the getter returns the new content
+            this._cachedRenderedHTML = html;
+            this._lastRenderedContent = this.noteContent;
+            this._lastRenderedNote = this.currentNote;
+
+            if (queryBlocks.length) {
+                this._scheduleDataviewQueries(queryBlocks, this.noteContent, this.currentNote, queryGeneration);
+            }
+
+            // Schedule async post-processing (MathJax, Mermaid, syntax highlighting, video)
+            this.schedulePreviewPostProcessing();
+
+            return html;
+        },
+
+        _renderMarkdownContent(noteContent) {
+            return renderMarkdownSync({
+                noteContent,
                 currentNote: this.currentNote,
                 noteLookupByPath: this._noteLookup.byPath,
                 noteLookupByPathLower: this._noteLookup.byPathLower,
@@ -441,16 +484,38 @@ export function createPreview() {
                 typeIconSvg,
                 escapeHtml: this.escapeHtml.bind(this),
             });
+        },
 
-            // Cache immediately so the getter returns the new content
-            this._cachedRenderedHTML = html;
-            this._lastRenderedContent = this.noteContent;
-            this._lastRenderedNote = this.currentNote;
+        _scheduleDataviewQueries(blocks, source, notePath, generation) {
+            if (this._dataviewQueryTimeout) clearTimeout(this._dataviewQueryTimeout);
+            this._dataviewQueryTimeout = setTimeout(() => {
+                this._dataviewQueryTimeout = null;
+                this._resolveDataviewQueries(blocks, source, notePath, generation);
+            }, DATAVIEW_QUERY_DEBOUNCE_MS);
+        },
 
-            // Schedule async post-processing (MathJax, Mermaid, syntax highlighting, video)
+        async _resolveDataviewQueries(blocks, source, notePath, generation) {
+            const replacements = blocks.length > MAX_DATAVIEW_QUERIES_PER_NOTE
+                ? blocks.map(() => formatDataviewError(`Limite de ${MAX_DATAVIEW_QUERIES_PER_NOTE} consultas por nota.`))
+                : await Promise.all(blocks.map(async ({ query }) => {
+                    try {
+                        const response = await api.sendJSON('/api/query', 'POST', { query });
+                        return formatDataviewResult(response);
+                    } catch (error) {
+                        console.error('Basalt query failed:', error);
+                        return formatDataviewError(error.detail || error.message || 'Falha ao executar consulta.');
+                    }
+                }));
+            if (generation !== this._queryRenderGeneration || this.noteContent !== source || this.currentNote !== notePath) return;
+            if (!this._dataviewResults) this._dataviewResults = Object.create(null);
+            for (let i = 0; i < blocks.length; i++) {
+                this._dataviewResults[blocks[i].query] = replacements[i];
+            }
+            const renderedSource = previewSourceWithDataviewResults(source, blocks, this._dataviewResults);
+            this._cachedRenderedHTML = this._renderMarkdownContent(renderedSource);
+            this._lastRenderedContent = source;
+            this._lastRenderedNote = notePath;
             this.schedulePreviewPostProcessing();
-
-            return html;
         },
 
         // Schedules the async DOM work that must run after the HTML is in the DOM.

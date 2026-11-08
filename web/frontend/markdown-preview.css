@@ -241,6 +241,18 @@
     border-collapse: collapse;
     border: 1px solid var(--border-primary);
 }
+.markdown-preview table.basalt-query-table {
+    width: auto;
+    max-width: 100%;
+    margin-bottom: 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+.markdown-preview .basalt-query-table th,
+.markdown-preview .basalt-query-table td {
+    padding: 0.25rem 0.5rem;
+    overflow-wrap: anywhere;
+}
 .markdown-preview th, .markdown-preview td {
     border: 1px solid var(--border-primary);
     padding: 0.75rem 1rem;
