@@ -223,6 +223,11 @@
             caret-color: var(--text-primary);
             background: transparent !important;
         }
+        .editor-wrapper.syntax-highlight .editor-textarea::selection {
+            color: transparent;
+            background-color: rgba(59, 130, 246, 0.35);
+            background-color: color-mix(in srgb, var(--accent-primary) 40%, transparent);
+        }
         .syntax-overlay {
             position: absolute;
             inset: 0;

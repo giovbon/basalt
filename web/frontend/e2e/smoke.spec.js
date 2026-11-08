@@ -79,6 +79,22 @@ test('opens a note from the sidebar and renders the preview', async ({ page }) =
   await expect(page).toHaveURL(/\/Welcome$/);
 });
 
+test('keeps selected text transparent over the syntax highlight overlay', async ({ page }) => {
+  await page.locator('.note-item[data-path="Welcome.md"]').click();
+
+  const editor = page.locator('#note-editor');
+  await expect(editor).toHaveValue(/This is the end-to-end test vault/);
+  await expect(editor.locator('xpath=..')).toHaveClass(/syntax-highlight/);
+  await editor.evaluate((element) => element.setSelectionRange(0, element.value.length));
+
+  const selectionStyle = await editor.evaluate((element) => {
+    const style = getComputedStyle(element, '::selection');
+    return { color: style.color, backgroundColor: style.backgroundColor };
+  });
+  expect(selectionStyle.color).toBe('rgba(0, 0, 0, 0)');
+  expect(selectionStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+});
+
 test('renders query blocks and filters notes by frontmatter tags', async ({ page }) => {
   await page.locator('.note-item[data-path="Welcome.md"]').click();
 
