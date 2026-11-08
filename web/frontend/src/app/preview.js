@@ -153,6 +153,7 @@ export function createPreview() {
         
         // Single click entry point for the preview pane.
         handlePreviewClick(event) {
+            this.activateSearchMatch(event.target);
             if (this.toggleTaskFromPreview(event)) return;
             this.handleInternalLink(event);
         },
@@ -469,6 +470,8 @@ export function createPreview() {
 
             const queryGeneration = (this._queryRenderGeneration || 0) + 1;
             this._queryRenderGeneration = queryGeneration;
+            const previewGeneration = (this._previewRenderGeneration || 0) + 1;
+            this._previewRenderGeneration = previewGeneration;
             if (this._dataviewQueryTimeout) {
                 clearTimeout(this._dataviewQueryTimeout);
                 this._dataviewQueryTimeout = null;
@@ -504,6 +507,7 @@ export function createPreview() {
             this._cachedRenderedHTML = html;
             this._lastRenderedContent = this.noteContent;
             this._lastRenderedNote = this.currentNote;
+            this._scheduleSearchHighlightRefresh(previewGeneration);
 
             if (queryBlocks.length) {
                 this._scheduleDataviewQueries(queryBlocks, this.noteContent, this.currentNote, queryGeneration);
@@ -513,6 +517,29 @@ export function createPreview() {
             this.schedulePreviewPostProcessing();
 
             return html;
+        },
+
+        _scheduleSearchHighlightRefresh(generation) {
+            if (!this.currentSearchHighlight || typeof this.$nextTick !== 'function') return;
+            const notePath = this.currentNote;
+            this.$nextTick(() => {
+                requestAnimationFrame(() => {
+                    if (generation !== this._previewRenderGeneration
+                        || notePath !== this.currentNote
+                        || !this.currentSearchHighlight) return;
+
+                    const target = this._searchTargetAfterRender;
+                    if (target
+                        && target.notePath === notePath
+                        && target.query === this.currentSearchHighlight) {
+                        this.highlightSearchTerm(target.query, false, target.line, target.column);
+                        if (this.currentMatchIndex >= 0) this._searchTargetAfterRender = null;
+                        return;
+                    }
+
+                    this._reapplySearchHighlights();
+                });
+            });
         },
 
         _renderMarkdownContent(noteContent) {
@@ -562,6 +589,9 @@ export function createPreview() {
             this._cachedRenderedHTML = this._renderMarkdownContent(renderedSource);
             this._lastRenderedContent = source;
             this._lastRenderedNote = notePath;
+            const previewGeneration = (this._previewRenderGeneration || 0) + 1;
+            this._previewRenderGeneration = previewGeneration;
+            this._scheduleSearchHighlightRefresh(previewGeneration);
             this.schedulePreviewPostProcessing();
         },
 

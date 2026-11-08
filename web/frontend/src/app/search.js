@@ -38,11 +38,16 @@ export function createSearch() {
         // Highlight search term in editor and preview
         highlightSearchTerm(query, focusEditor = false, targetLine = null, targetColumn = null) {
             if (!query || !query.trim()) {
+                this._searchTargetAfterRender = null;
                 this.clearSearchHighlights();
                 return;
             }
             
             const searchTerm = query.trim();
+            if (this._searchTargetAfterRender
+                && this._searchTargetAfterRender.query !== searchTerm) {
+                this._searchTargetAfterRender = null;
+            }
             
             // Highlight in editor (textarea)
             this.highlightInEditor(searchTerm, focusEditor, targetLine, targetColumn);
@@ -339,7 +344,13 @@ export function createSearch() {
 
         // Index of the <mark> that corresponds to a source offset (see lib/search-preview.js).
         _previewMarkIndexForSourceOffset(offset, foldedTerm, markCount) {
-            return previewMarkIndexForSourceOffset(this.noteContent || '', offset, foldedTerm, markCount);
+            return previewMarkIndexForSourceOffset(
+                this.noteContent || '',
+                offset,
+                foldedTerm,
+                markCount,
+                this.exactSearchMatch
+            );
         },
 
         // 0-based character offset of a 1-based line:column (see lib/search-preview.js).
@@ -453,6 +464,22 @@ export function createSearch() {
             // Scroll to the match
             const targetMatch = allMatches[index];
             if (targetMatch) this._scrollPreviewToElement(targetMatch);
+        },
+
+        activateSearchMatch(target) {
+            const mark = target && typeof target.closest === 'function'
+                ? target.closest('.markdown-preview mark.search-highlight')
+                : null;
+            if (!mark) return;
+
+            const marks = [...document.querySelectorAll('.markdown-preview mark.search-highlight')];
+            const index = marks.indexOf(mark);
+            if (index === -1) return;
+
+            marks.forEach((match, matchIndex) => {
+                match.classList.toggle('active-match', matchIndex === index);
+            });
+            this.currentMatchIndex = index;
         },
         
         // Clear search highlights

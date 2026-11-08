@@ -5,7 +5,7 @@
 // disappear. These helpers decide which source spans become visible text so a
 // clicked result can target the matching <mark> element.
 
-import { foldForSearch, lineStartOffset } from './search-fold.js';
+import { foldForSearch, isWholeWordMatch, lineStartOffset } from './search-fold.js';
 
 /** 0-based offset of a 1-based line:column (column in runes, as the API sends). */
 export function sourceOffsetForLineColumn(content, line, column = 1) {
@@ -228,7 +228,7 @@ export function spanOverlapsRegions(regions, start, end) {
  *   -1 when that occurrence never becomes preview text, and
  *   -2 when the source-side count disagrees with the rendered marks.
  */
-export function previewMarkIndexForSourceOffset(content, offset, foldedTerm, markCount) {
+export function previewMarkIndexForSourceOffset(content, offset, foldedTerm, markCount, exactMatch = false) {
     if (!content) return -2;
 
     const folded = foldForSearch(content);
@@ -246,6 +246,7 @@ export function previewMarkIndexForSourceOffset(content, offset, foldedTerm, mar
         const start = folded.map[idx];
         const end = folded.map[idx + foldedTerm.length];
         if (spanOverlapsRegions(regions, start, end)) continue;
+        if (exactMatch && !isWholeWordMatch(content, start, end)) continue;
 
         total++;
         if (start < offset) before++;

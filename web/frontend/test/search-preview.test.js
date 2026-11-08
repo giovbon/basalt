@@ -93,3 +93,12 @@ test('previewMarkIndexForSourceOffset folds accents when counting', () => {
     const accented = content.indexOf('coração');
     assert.equal(previewMarkIndexForSourceOffset(content, accented, 'coracao', 2), 0);
 });
+
+test('previewMarkIndexForSourceOffset ignores partial matches in exact mode', () => {
+    const content = 'semestres, semestre, semestre';
+    const firstExact = content.indexOf('semestre', 1);
+    const secondExact = content.indexOf('semestre', firstExact + 1);
+
+    assert.equal(previewMarkIndexForSourceOffset(content, firstExact, 'semestre', 2, true), 0);
+    assert.equal(previewMarkIndexForSourceOffset(content, secondExact, 'semestre', 2, true), 1);
+});

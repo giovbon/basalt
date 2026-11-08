@@ -65,6 +65,7 @@ export function createState() {
         graphData: null,
         searchResults: [],
         currentSearchHighlight: '', // Track current highlighted search term
+        _searchTargetAfterRender: null,
         currentMatchIndex: 0, // Current match being viewed
         totalMatches: 0, // Total number of matches in the note
         isSaving: false,
@@ -104,6 +105,7 @@ export function createState() {
         
         // Preview rendering debounce
         _previewDebounceTimeout: null,
+        _previewRenderGeneration: 0,
         _lastRenderedContent: '',
         _lastRenderedNote: '',
         _cachedRenderedHTML: '',

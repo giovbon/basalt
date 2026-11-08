@@ -119,16 +119,41 @@ test('searches the vault and opens a match', async ({ page }) => {
   const group = page.locator('.search-result-group', { hasText: 'Roadmap' });
   await expect(group.locator('.search-result-header')).toBeVisible();
   await group.locator('.search-result-header').click();
-  await group.locator('.search-match-row').first().click();
+  const searchMatches = group.locator('.search-match-row');
+  await expect(searchMatches).toHaveCount(2);
+  await searchMatches.first().click();
 
-  await expect(page.locator('#note-editor')).toHaveValue(/Ship the smoke tests/);
+  await expect(page.locator('#note-editor')).toHaveValue(/Ship the second smoke test/);
   await expect(page).toHaveURL(/\/Projects\/Roadmap(\?.*)?$/);
   const preview = page.locator('[data-testid="preview"]');
+  const matches = preview.locator('mark.search-highlight');
   const activeMatch = preview.locator('mark.search-highlight.active-match');
+  await expect(matches).toHaveCount(2);
+  await expect(activeMatch).toHaveAttribute('data-match-index', '0');
   await expect(activeMatch).toHaveText('Ship');
+
+  await page.evaluate(() => window.$root.schedulePreviewRender());
+  await expect.poll(() => page.evaluate(() => window.$root._previewRenderTimeout))
+    .not.toBeNull();
+  await expect.poll(() => page.evaluate(() => window.$root._previewRenderTimeout))
+    .toBeNull();
+  await expect(preview.locator('mark.search-highlight.active-match'))
+    .toHaveAttribute('data-match-index', '0');
+
+  await searchMatches.nth(1).click();
+  await expect(page.locator('#note-editor')).toHaveValue(/Ship the smoke tests/);
+  await expect(preview.locator('mark.search-highlight.active-match'))
+    .toHaveAttribute('data-match-index', '1');
+  await expect(preview.locator('mark.search-highlight.active-match')).toHaveText('Ship');
+
+  await matches.first().click();
+  await expect(preview.locator('mark.search-highlight.active-match'))
+    .toHaveAttribute('data-match-index', '0');
+  await expect(preview.locator('mark.search-highlight.active-match')).toHaveText('Ship');
+
   await expect.poll(() => preview.evaluate((element) => element.parentElement.scrollTop))
     .toBeGreaterThan(0);
-  const matchPosition = await activeMatch.evaluate((element) => {
+  const matchPosition = await preview.locator('mark.search-highlight.active-match').evaluate((element) => {
     const pane = element.closest('[data-testid="preview"]').parentElement;
     const matchRect = element.getBoundingClientRect();
     const paneRect = pane.getBoundingClientRect();
@@ -136,6 +161,24 @@ test('searches the vault and opens a match', async ({ page }) => {
   });
   expect(matchPosition.top).toBeGreaterThanOrEqual(matchPosition.paneTop);
   expect(matchPosition.top).toBeLessThan(matchPosition.paneBottom);
+});
+
+test('activates the clicked sidebar occurrence in Markdown-formatted text', async ({ page }) => {
+  await page.locator('[data-testid="rail-search"]').click();
+  await page.locator('[data-testid="search-input"]').fill('semestre');
+
+  const group = page.locator('.search-result-group', { hasText: 'Roadmap' });
+  await expect(group.locator('.search-result-header')).toBeVisible();
+  await group.locator('.search-result-header').click();
+  const searchMatches = group.locator('.search-match-row');
+  await expect(searchMatches).toHaveCount(5);
+
+  const preview = page.locator('[data-testid="preview"]');
+  for (const index of [0, 1, 2, 3, 4]) {
+    await searchMatches.nth(index).click();
+    await expect(preview.locator('mark.search-highlight.active-match'))
+      .toHaveAttribute('data-match-index', String(index));
+  }
 });
 
 test('expands TODOs by note and opens the highlighted occurrence', async ({ page }) => {

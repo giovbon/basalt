@@ -166,10 +166,17 @@ export function createNotes() {
                 if (searchQuery) {
                     this.currentSearchHighlight = searchQuery;
                     this.currentSearchExactMatch = this.exactSearchMatch;
+                    this._searchTargetAfterRender = {
+                        notePath,
+                        query: searchQuery,
+                        line: targetLine,
+                        column: targetColumn,
+                    };
                 } else {
                     // Clear highlights if no search query
                     this.currentSearchHighlight = '';
                     this.currentSearchExactMatch = this.exactSearchMatch;
+                    this._searchTargetAfterRender = null;
                 }
                 
                 // Expand folder tree to show the loaded note
