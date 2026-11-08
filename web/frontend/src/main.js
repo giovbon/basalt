@@ -9,6 +9,7 @@ import { createState } from './app/state.js';
 import { createQuickSwitcher } from './app/quick-switcher.js';
 import { createMedia } from './app/media.js';
 import { createSearch } from './app/search.js';
+import { createTodos } from './app/todos.js';
 import { createBootstrap } from './app/bootstrap.js';
 import { createNotes } from './app/notes.js';
 import { createPreview } from './app/preview.js';
@@ -40,6 +41,7 @@ function noteApp() {
         createQuickSwitcher(),
         createMedia(),
         createSearch(),
+        createTodos(),
         createBootstrap(),
         createNotes(),
         createPreview(),
@@ -65,6 +67,7 @@ const PANEL_COMPONENTS = [
     'iconRail',
     'filesPanel',
     'searchPanel',
+    'todosPanel',
     'tagsPanel',
     'outlinePanel',
     'backlinksPanel',

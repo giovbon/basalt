@@ -22,6 +22,7 @@ func NewServer(cfg *config.Config, v *vault.Vault, sess *session.Manager, assets
 
 	authH := NewAuthHandler(cfg, sess, assetsFS)
 	notesH := NewNotesHandler(cfg, v)
+	todosH := NewTodosHandler(v)
 	foldersH := NewFoldersHandler(cfg, v)
 	mediaH := NewMediaHandler(cfg, v)
 	tagsH := NewTagsSearchHandler(cfg, v)
@@ -65,6 +66,7 @@ func NewServer(cfg *config.Config, v *vault.Vault, sess *session.Manager, assets
 	mux.HandleFunc("GET /api/tags", tagsH.GetAllTags)
 	mux.HandleFunc("GET /api/tags/{tag}", tagsH.GetNotesByTag)
 	mux.HandleFunc("GET /api/search", tagsH.SearchNotes)
+	mux.HandleFunc("GET /api/todos", todosH.ListTodos)
 
 	// Notes: literal paths before wildcards
 	mux.HandleFunc("POST /api/notes/replace", notesH.ReplaceInNote)

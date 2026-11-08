@@ -45,6 +45,12 @@ export function createState() {
         noteContent: '',
         viewMode: 'split', // 'edit', 'split', 'preview'
         searchQuery: '',
+        todoKeywords: 'TODO, FIXME, LATER',
+        todos: [],
+        expandedTodoNotes: {},
+        todosLoading: false,
+        todosLoaded: false,
+        todosError: '',
         
         // Graph state (separate overlay, doesn't affect viewMode)
         showGraph: false,
@@ -129,7 +135,7 @@ export function createState() {
         sortMode: localStorage.getItem('sortMode') || 'a-z',
 
         // Icon rail / panel state
-        activePanel: 'files', // 'files', 'search', 'tags', 'outline', 'backlinks', 'settings'
+        activePanel: 'files', // 'files', 'search', 'todos', 'tags', 'outline', 'backlinks', 'settings'
         
         // Folder state
         folderTree: [],

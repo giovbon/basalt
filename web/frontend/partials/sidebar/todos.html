@@ -1,0 +1,82 @@
+                <!-- ==================== TODO PANEL ==================== -->
+                <div x-data="todosPanel" x-show="activePanel === 'todos'" x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" class="flex flex-col h-full">
+                    <div class="flex-shrink-0 px-3 py-2 border-b flex items-center justify-between" style="border-color: var(--border-primary);">
+                        <span class="text-xs font-semibold uppercase tracking-wide" style="color: var(--text-tertiary);" x-text="t('todos.title')"></span>
+                        <button
+                            type="button"
+                            @click="loadTodos()"
+                            class="p-1.5 rounded"
+                            style="background-color: var(--bg-tertiary); color: var(--text-secondary);"
+                            :title="t('todos.refresh')"
+                            :aria-label="t('todos.refresh')"
+                        >
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7v5h-5M4 17v-5h5m-4.1-3a8 8 0 0113.2-2L20 12M4 12l1.9 5a8 8 0 0013.2-2"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="flex-1 overflow-y-auto custom-scrollbar">
+                        <template x-if="todosLoading">
+                            <p class="px-3 py-4 text-xs text-center" style="color: var(--text-tertiary);" x-text="t('todos.loading')"></p>
+                        </template>
+                        <template x-if="todosError">
+                            <p class="px-3 py-4 text-xs" style="color: var(--text-secondary);" x-text="todosError"></p>
+                        </template>
+                        <template x-if="!todosLoading && !todosError && todos.length === 0">
+                            <p class="px-3 py-4 text-xs text-center" style="color: var(--text-tertiary);" x-text="t('todos.empty')"></p>
+                        </template>
+                        <template x-for="group in todoGroups" :key="group.path">
+                            <div class="search-result-group" data-testid="todo-group">
+                                <div class="search-result-header flex items-center gap-1 px-2 py-1.5" :class="{'active': currentNote === group.path}">
+                                    <button
+                                        type="button"
+                                        @click="toggleTodoGroup(group.path)"
+                                        class="flex items-start gap-1.5 min-w-0 flex-1 text-left"
+                                        :title="group.path"
+                                        :aria-expanded="isTodoGroupExpanded(group.path) ? 'true' : 'false'"
+                                    >
+                                        <svg class="w-3 h-3 shrink-0 mt-1 search-result-chevron" :class="{'expanded': isTodoGroupExpanded(group.path)}" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex items-center gap-1">
+                                                <span class="font-medium truncate text-sm" x-text="group.name"></span>
+                                                <span class="search-result-count shrink-0" x-text="group.todos.length"></span>
+                                            </div>
+                                            <div class="text-[10px] truncate" style="color: var(--text-tertiary);" x-text="group.path"></div>
+                                        </div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        @click="loadNote(group.path)"
+                                        class="p-1.5 rounded shrink-0"
+                                        style="color: var(--text-tertiary);"
+                                        :title="t('todos.open_note')"
+                                        :aria-label="t('todos.open_note')"
+                                    >
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 17L17 7M17 7H9M17 7v8"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                                <div x-show="isTodoGroupExpanded(group.path)" x-cloak>
+                                    <template x-for="(todo, index) in group.todos" :key="`${todo.line_number}-${todo.column}-${todo.keyword}-${index}`">
+                                        <button
+                                            type="button"
+                                            @click="openTodo(todo)"
+                                            class="search-match-row px-2 py-1.5"
+                                            data-testid="todo-match"
+                                            :title="t('todos.open_at_line', {line: todo.line_number, column: todo.column})"
+                                        >
+                                            <div class="flex items-center gap-1 mb-1">
+                                                <span class="search-match-line" x-text="'L' + todo.line_number + ':' + todo.column"></span>
+                                            </div>
+                                            <div class="text-xs break-words leading-snug" style="color: var(--text-secondary);" x-html="todo.context"></div>
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                <!-- END TODO PANEL -->

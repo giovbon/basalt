@@ -38,6 +38,7 @@ export const LOCAL_SETTINGS = {
     autoFillNoteTitle: { key: 'autoFillNoteTitle', type: 'boolean', default: false },
     // String settings
     sortMode: { key: 'sortMode', type: 'string', default: 'a-z' },
+    todoKeywords: { key: 'todoKeywords', type: 'string', default: 'TODO, FIXME, LATER' },
     newButtonAction: {
         key: 'newButtonAction', type: 'string', default: 'chooser',
         valid: ['chooser', 'note', 'folder']

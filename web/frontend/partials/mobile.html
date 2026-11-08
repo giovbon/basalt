@@ -30,6 +30,24 @@
                 x-text="searchResults.length > 9 ? '9+' : searchResults.length"
             ></span>
         </button>
+        <button
+            class="mobile-bottom-tab relative"
+            :class="{'active': activePanel === 'todos' && mobileSidebarOpen}"
+            @click="openSidebarPanel('todos'); mobileSidebarOpen = true;"
+            :aria-label="t('todos.title')"
+        >
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-3M9 5a2 2 0 002 2h2a2 2 0 002-2M9 12l2 2 4-4M9 17h6"></path>
+            </svg>
+            <span x-text="t('todos.title')"></span>
+            <span
+                x-show="todos.length > 0"
+                x-cloak
+                class="absolute top-1 right-1/4 w-4 h-4 text-[9px] font-bold rounded-full flex items-center justify-center"
+                style="background-color: var(--accent-primary); color: white;"
+                x-text="todos.length > 9 ? '9+' : todos.length"
+            ></span>
+        </button>
         <button 
             class="mobile-bottom-tab relative"
             :class="{'active': activePanel === 'tags' && mobileSidebarOpen}"

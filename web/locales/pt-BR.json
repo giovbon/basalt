@@ -72,6 +72,7 @@
     "files": "Arquivos",
     "search": "Buscar",
     "search_title": "BUSCA",
+    "todos": "Tarefas",
     "settings": "Configurações",
     "settings_title": "CONFIGURAÇÕES",
     "filtered_notes": "Notas Filtradas"
@@ -89,6 +90,20 @@
     "days_ago": "há {{count}}d",
     "tasks_all_checked": "{{changed}} de {{total}} tarefas concluídas",
     "tasks_all_unchecked": "{{changed}} de {{total}} tarefas não concluídas"
+  },
+  "todos": {
+    "title": "Tarefas",
+    "refresh": "Atualizar tarefas",
+    "loading": "Buscando tarefas...",
+    "empty": "Nenhuma tarefa encontrada",
+    "line": "Linha {{line}}",
+    "expand_note": "Expandir tarefas de {{name}}",
+    "collapse_note": "Recolher tarefas de {{name}}",
+    "open_note": "Abrir nota",
+    "open_at_line": "Abrir na linha {{line}}, coluna {{column}}",
+    "keywords_label": "Palavras-chave de tarefas",
+    "keywords_placeholder": "TODO, FIXME, LATER",
+    "keywords_description": "Separe as palavras-chave por vírgula. Só serão encontradas marcações no formato PALAVRA-CHAVE: descrição; a busca não diferencia maiúsculas de minúsculas."
   },
   "notes": {
     "confirm_delete": "Excluir \"{{name}}\"?",

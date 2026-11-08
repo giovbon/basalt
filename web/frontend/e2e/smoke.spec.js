@@ -47,6 +47,25 @@ test('searches the vault and opens a match', async ({ page }) => {
   await expect(page).toHaveURL(/\/Projects\/Roadmap(\?.*)?$/);
 });
 
+test('expands TODOs by note and opens the highlighted occurrence', async ({ page }) => {
+  await page.locator('[data-testid="rail-todos"]').click();
+
+  const group = page.locator('[data-testid="todo-group"]', { hasText: 'Ideas' });
+  await expect(group).toBeVisible();
+  const expand = group.locator('button[aria-expanded]');
+  await expect(expand).toHaveAttribute('aria-expanded', 'false');
+  await expand.click();
+
+  const matches = group.locator('[data-testid="todo-match"]');
+  await expect(matches).toHaveCount(2);
+  await expect(matches.first().locator('mark.search-highlight')).toHaveText('TODO:');
+  await matches.first().click();
+
+  await expect(page.locator('#note-editor')).toHaveValue(/TODO: Add another idea/);
+  await expect(page).toHaveURL(/\/Ideas\?search=TODO%3A&line=5&col=1$/);
+  await expect(page.locator('[data-testid="preview"] mark.search-highlight')).toHaveText('TODO:');
+});
+
 test('follows a wikilink from the preview', async ({ page }) => {
   await page.locator('.note-item[data-path="Welcome.md"]').click();
 

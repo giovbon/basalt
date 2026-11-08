@@ -519,6 +519,9 @@ export function createBootstrap() {
         // silently clear the user's persisted desktop preference.
         openSidebarPanel(panelName) {
             const isDesktop = window.innerWidth > 768;
+            if (panelName === 'todos' && this.activePanel !== 'todos') {
+                this.loadTodos();
+            }
             if (isDesktop && this.activePanel === panelName && !this.sidebarPanelCollapsed) {
                 this.toggleSidebarPanel();
                 return;
