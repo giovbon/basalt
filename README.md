@@ -214,10 +214,12 @@ Para tópicos protegidos, preencha usuário e senha juntos. A senha é armazenad
 no `config.yaml` com permissões restritas e nunca é devolvida pela API; deixe o
 campo vazio no painel para manter a senha salva.
 
-Cada mensagem vira uma nota Markdown na pasta `Captura` dentro do vault;
-anexos são salvos ao lado e vinculados na nota. O monitor busca as mensagens
-retidas pelo ntfy ao iniciar e ao reconectar, evitando duplicatas já capturadas.
-Anexos precisam estar hospedados no mesmo servidor ntfy configurado e têm limite
-de 100 MB. Em Docker, a pasta fica persistente no volume de `NOTES_DIR`.
+Cada nova mensagem vira uma nota Markdown na pasta `Captura` dentro do vault;
+anexos são salvos ao lado e vinculados na nota. Ao iniciar pela primeira vez, o
+monitor ignora o histórico anterior e salva o estado dos eventos processados em
+`.basalt-ntfy-state.json` dentro de `NOTES_DIR`, evitando recriar notas apagadas
+ao reiniciar ou reconectar. Anexos precisam estar hospedados no mesmo servidor
+ntfy configurado e têm limite de 100 MB. Em Docker, a pasta e o estado ficam
+persistentes no volume de `NOTES_DIR`.
 Variáveis `NTFY_*` definidas no ambiente prevalecem sobre o arquivo na próxima
 inicialização.

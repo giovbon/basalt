@@ -2,6 +2,7 @@ package ntfy
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -155,6 +156,7 @@ func TestCaptureEventRejectsAttachmentFromAnotherOrigin(t *testing.T) {
 }
 
 func TestListenSubscribesAndCapturesTextMessage(t *testing.T) {
+	eventTime := time.Now().Add(time.Minute).Unix()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/inbox/json" || r.URL.Query().Get("since") != "all" {
 			t.Errorf("request = %s?%s, want /inbox/json?since=all", r.URL.Path, r.URL.RawQuery)
@@ -163,7 +165,7 @@ func TestListenSubscribesAndCapturesTextMessage(t *testing.T) {
 		if !ok || username != "ntfy-user" || password != "test-password" {
 			t.Errorf("BasicAuth() = (%q, %q, %t), want configured ntfy credentials", username, password, ok)
 		}
-		_, _ = w.Write([]byte(`{"id":"Msg1","time":1700000000,"event":"message","topic":"inbox","message":"captured text"}` + "\n"))
+		_, _ = fmt.Fprintf(w, `{"id":"Msg1","time":%d,"event":"message","topic":"inbox","message":"captured text"}`+"\n", eventTime)
 	}))
 	defer server.Close()
 
@@ -182,12 +184,56 @@ func TestListenSubscribesAndCapturesTextMessage(t *testing.T) {
 		t.Fatal("listen returned nil after stream ended, want EOF")
 	}
 
-	note, err := os.ReadFile(filepath.Join(notesDir, "Captura", "20231114-221320-Msg1.md"))
+	noteName := time.Unix(eventTime, 0).UTC().Format("20060102-150405") + "-Msg1.md"
+	note, err := os.ReadFile(filepath.Join(notesDir, "Captura", noteName))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(note), "captured text") {
 		t.Errorf("captured note = %q, want message text", note)
+	}
+}
+
+func TestListenDoesNotRecreateDeletedCapturesAfterRestart(t *testing.T) {
+	eventTime := time.Now().Add(time.Minute).Unix()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintln(w, `{"id":"Old1","time":1700000000,"event":"message","topic":"inbox","message":"old message"}`)
+		_, _ = fmt.Fprintf(w, `{"id":"New1","time":%d,"event":"message","topic":"inbox","message":"new message"}`+"\n", eventTime)
+	}))
+	defer server.Close()
+
+	notesDir := t.TempDir()
+	settings := config.NtfyConfig{
+		ServerURL:  server.URL,
+		Topic:      "inbox",
+		CaptureDir: "Captura",
+	}
+	noteName := time.Unix(eventTime, 0).UTC().Format("20060102-150405") + "-New1.md"
+	notePath := filepath.Join(notesDir, "Captura", noteName)
+
+	monitor, err := NewMonitor(settings, notesDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := monitor.listen(context.Background()); err == nil {
+		t.Fatal("listen returned nil after stream ended, want EOF")
+	}
+	if _, err := os.Stat(filepath.Join(notesDir, "Captura", "20231114-221320-Old1.md")); !os.IsNotExist(err) {
+		t.Fatalf("historical message was captured, stat error = %v", err)
+	}
+	if err := os.Remove(notePath); err != nil {
+		t.Fatal(err)
+	}
+
+	monitor, err = NewMonitor(settings, notesDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := monitor.listen(context.Background()); err == nil {
+		t.Fatal("listen returned nil after stream ended, want EOF")
+	}
+	if _, err := os.Stat(notePath); !os.IsNotExist(err) {
+		t.Fatalf("deleted capture was recreated, stat error = %v", err)
 	}
 }
 

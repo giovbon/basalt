@@ -2,6 +2,7 @@ package ntfy
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"notediscovery/internal/config"
@@ -22,6 +24,9 @@ import (
 const (
 	maxEventSize      = 8 << 20
 	maxAttachmentSize = 100 << 20
+	maxCaptureState   = 64 << 20
+	captureStateFile  = ".basalt-ntfy-state.json"
+	captureStateVer   = 1
 )
 
 type Event struct {
@@ -42,13 +47,28 @@ type Attachment struct {
 }
 
 type Monitor struct {
-	topic      string
-	username   string
-	password   string
-	captureDir string
-	streamURL  string
-	serverURL  *url.URL
-	client     *http.Client
+	topic       string
+	username    string
+	password    string
+	captureDir  string
+	streamURL   string
+	serverURL   *url.URL
+	client      *http.Client
+	sourceKey   string
+	statePath   string
+	stateMu     sync.Mutex
+	state       captureState
+	stateLoaded bool
+}
+
+type captureState struct {
+	Version int                           `json:"version"`
+	Sources map[string]captureSourceState `json:"sources"`
+}
+
+type captureSourceState struct {
+	IgnoreBefore int64           `json:"ignore_before"`
+	Seen         map[string]bool `json:"seen"`
 }
 
 func NewMonitor(cfg config.NtfyConfig, notesDir string) (*Monitor, error) {
@@ -97,6 +117,8 @@ func NewMonitor(cfg config.NtfyConfig, notesDir string) (*Monitor, error) {
 		streamURL:  streamURL.String(),
 		serverURL:  serverURL,
 		client:     client,
+		sourceKey:  serverURL.String() + "\x00" + cfg.Topic,
+		statePath:  filepath.Join(notesDir, captureStateFile),
 	}, nil
 }
 
@@ -130,6 +152,10 @@ func (m *Monitor) Run(ctx context.Context) error {
 }
 
 func (m *Monitor) listen(ctx context.Context) error {
+	if err := m.loadCaptureState(); err != nil {
+		return fmt.Errorf("loading ntfy capture state: %w", err)
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.streamURL, nil)
 	if err != nil {
 		return fmt.Errorf("building ntfy request: %w", err)
@@ -170,6 +196,13 @@ func (m *Monitor) listen(ctx context.Context) error {
 		if event.Event != "message" {
 			continue
 		}
+		m.stateMu.Lock()
+		source := m.state.Sources[m.sourceKey]
+		ignore := event.Time > 0 && event.Time < source.IgnoreBefore
+		m.stateMu.Unlock()
+		if ignore {
+			continue
+		}
 		if err := m.captureEvent(ctx, event); err != nil {
 			log.Printf("ntfy monitor could not capture message %q: %v", event.ID, err)
 		}
@@ -181,6 +214,18 @@ func (m *Monitor) listen(ctx context.Context) error {
 }
 
 func (m *Monitor) captureEvent(ctx context.Context, event Event) error {
+	if err := m.loadCaptureState(); err != nil {
+		return fmt.Errorf("loading ntfy capture state: %w", err)
+	}
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
+
+	source := m.state.Sources[m.sourceKey]
+	eventKey := captureEventKey(event)
+	if source.Seen[eventKey] {
+		return nil
+	}
+
 	if err := os.MkdirAll(m.captureDir, 0755); err != nil {
 		return fmt.Errorf("creating capture directory: %w", err)
 	}
@@ -196,7 +241,7 @@ func (m *Monitor) captureEvent(ctx context.Context, event Event) error {
 	prefix := stamp.Format("20060102-150405") + "-" + id
 	notePath := filepath.Join(m.captureDir, prefix+".md")
 	if _, err := os.Stat(notePath); err == nil {
-		return nil
+		return m.markCaptured(source, eventKey)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("checking existing capture note: %w", err)
 	}
@@ -232,6 +277,81 @@ func (m *Monitor) captureEvent(ctx context.Context, event Event) error {
 	}
 	if err := writeAtomic(notePath, strings.NewReader(note.String()), maxEventSize); err != nil {
 		return fmt.Errorf("saving capture note: %w", err)
+	}
+	return m.markCaptured(source, eventKey)
+}
+
+func captureEventKey(event Event) string {
+	if event.ID != "" {
+		return event.ID
+	}
+	return "time:" + strconv.FormatInt(event.Time, 10)
+}
+
+func (m *Monitor) loadCaptureState() error {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
+	if m.stateLoaded {
+		return nil
+	}
+
+	data, err := os.ReadFile(m.statePath)
+	shouldSave := false
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		m.state = captureState{
+			Version: captureStateVer,
+			Sources: make(map[string]captureSourceState),
+		}
+		shouldSave = true
+	case err != nil:
+		return err
+	default:
+		if err := json.Unmarshal(data, &m.state); err != nil {
+			return fmt.Errorf("decoding state file: %w", err)
+		}
+		if m.state.Version != captureStateVer || m.state.Sources == nil {
+			return fmt.Errorf("unsupported or invalid state file version %d", m.state.Version)
+		}
+	}
+
+	if m.state.Sources == nil {
+		m.state.Sources = make(map[string]captureSourceState)
+		shouldSave = true
+	}
+	source, exists := m.state.Sources[m.sourceKey]
+	if !exists {
+		source = captureSourceState{
+			IgnoreBefore: time.Now().Unix(),
+			Seen:         make(map[string]bool),
+		}
+		shouldSave = true
+	} else if source.Seen == nil || source.IgnoreBefore <= 0 {
+		return fmt.Errorf("invalid state for ntfy topic %q", m.topic)
+	}
+	m.state.Sources[m.sourceKey] = source
+	if shouldSave {
+		if err := m.saveCaptureStateLocked(); err != nil {
+			return err
+		}
+	}
+	m.stateLoaded = true
+	return nil
+}
+
+func (m *Monitor) markCaptured(source captureSourceState, eventKey string) error {
+	source.Seen[eventKey] = true
+	m.state.Sources[m.sourceKey] = source
+	return m.saveCaptureStateLocked()
+}
+
+func (m *Monitor) saveCaptureStateLocked() error {
+	data, err := json.Marshal(m.state)
+	if err != nil {
+		return fmt.Errorf("encoding state file: %w", err)
+	}
+	if err := writeAtomic(m.statePath, bytes.NewReader(data), maxCaptureState); err != nil {
+		return fmt.Errorf("saving state file: %w", err)
 	}
 	return nil
 }
