@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"notediscovery/internal/config"
+
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -51,6 +53,7 @@ type Monitor struct {
 	username    string
 	password    string
 	captureDir  string
+	tags        []string
 	streamURL   string
 	serverURL   *url.URL
 	client      *http.Client
@@ -86,6 +89,10 @@ func NewMonitor(cfg config.NtfyConfig, notesDir string) (*Monitor, error) {
 	if cfg.CaptureDir == "" || filepath.IsAbs(cfg.CaptureDir) {
 		return nil, fmt.Errorf("ntfy capture_dir must be a non-empty relative path")
 	}
+	tags := config.NormalizeNtfyTags(cfg.Tags)
+	if len(tags) == 0 {
+		tags = []string{"ntfy"}
+	}
 	captureDir := filepath.Clean(cfg.CaptureDir)
 	if captureDir == ".." || strings.HasPrefix(captureDir, ".."+string(filepath.Separator)) {
 		return nil, fmt.Errorf("ntfy capture_dir must stay inside the notes directory")
@@ -114,6 +121,7 @@ func NewMonitor(cfg config.NtfyConfig, notesDir string) (*Monitor, error) {
 		username:   cfg.Username,
 		password:   cfg.Password,
 		captureDir: filepath.Join(notesDir, captureDir),
+		tags:       tags,
 		streamURL:  streamURL.String(),
 		serverURL:  serverURL,
 		client:     client,
@@ -260,6 +268,15 @@ func (m *Monitor) captureEvent(ctx context.Context, event Event) error {
 		title = "Captura ntfy"
 	}
 	var note strings.Builder
+	frontmatter, err := yaml.Marshal(struct {
+		Tags []string `yaml:"tags"`
+	}{Tags: m.tags})
+	if err != nil {
+		return fmt.Errorf("encoding capture tags: %w", err)
+	}
+	note.WriteString("---\n")
+	note.Write(frontmatter)
+	note.WriteString("---\n\n")
 	fmt.Fprintf(&note, "# %s\n\n", title)
 	fmt.Fprintf(&note, "Capturado em %s UTC do tópico `%s`.\n", stamp.UTC().Format("02/01/2006 às 15:04"), event.Topic)
 	if message := strings.TrimSpace(event.Message); message != "" {

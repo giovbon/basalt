@@ -303,6 +303,7 @@ Todas as variáveis podem ser definidas no ambiente ou via `docker-compose.yml`:
 | `NTFY_USERNAME` | *(vazio)* | Usuário da conta ntfy (para tópicos protegidos). |
 | `NTFY_PASSWORD` | *(vazio)* | Senha da conta ntfy (para tópicos protegidos). |
 | `NTFY_CAPTURE_DIR` | `Captura` | Pasta relativa a `NOTES_DIR` onde as capturas serão salvas. |
+| `NTFY_TAGS` | `ntfy` | Tags separadas por vírgulas aplicadas a todas as notas capturadas. |
 
 ### Captura de mensagens do ntfy
 
@@ -319,18 +320,21 @@ ntfy:
   username: "" # opcional para tópicos protegidos
   password: "" # opcional para tópicos protegidos
   capture_dir: "Captura"
+  tags: [ntfy, captura]
 ```
 
 Para tópicos protegidos, preencha usuário e senha juntos. A senha é armazenada
 no `config.yaml` com permissões restritas e nunca é devolvida pela API; deixe o
 campo vazio no painel para manter a senha salva.
 
-Cada nova mensagem vira uma nota Markdown na pasta `Captura` dentro do vault;
-anexos são salvos ao lado e vinculados na nota. Ao iniciar pela primeira vez, o
-monitor ignora o histórico anterior e salva o estado dos eventos processados em
-`.basalt-ntfy-state.json` dentro de `NOTES_DIR`, evitando recriar notas apagadas
+Cada nova mensagem vira uma nota Markdown com as tags configuradas na pasta de
+captura dentro do vault; anexos são salvos ao lado e vinculados na nota. As tags
+são definidas em **Configurações > Captura via ntfy**, separadas por vírgulas.
+O padrão é `ntfy`. Ao iniciar pela primeira vez, o monitor ignora o histórico
+anterior e salva o estado dos eventos processados em `.basalt-ntfy-state.json`
+dentro de `NOTES_DIR`, evitando recriar notas apagadas
 ao reiniciar ou reconectar. Anexos precisam estar hospedados no mesmo servidor
 ntfy configurado e têm limite de 100 MB. Em Docker, a pasta e o estado ficam
 persistentes no volume de `NOTES_DIR`.
 Variáveis `NTFY_*` definidas no ambiente prevalecem sobre o arquivo na próxima
-inicialização.
+inicialização. `NTFY_TAGS` também aceita uma lista separada por vírgulas.

@@ -22,6 +22,7 @@ export function createState() {
             serverUrl: 'https://ntfy.sh',
             topic: '',
             captureDir: 'Captura',
+            tags: 'ntfy',
             username: '',
             passwordConfigured: false,
             password: '',

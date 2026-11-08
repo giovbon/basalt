@@ -377,6 +377,9 @@ export function createBootstrap() {
                         serverUrl: config.ntfy.serverUrl || 'https://ntfy.sh',
                         topic: config.ntfy.topic || '',
                         captureDir: config.ntfy.captureDir || 'Captura',
+                        tags: Array.isArray(config.ntfy.tags) && config.ntfy.tags.length
+                            ? config.ntfy.tags.join(', ')
+                            : 'ntfy',
                         username: config.ntfy.username || '',
                         passwordConfigured: config.ntfy.passwordConfigured === true,
                         password: '',
@@ -400,11 +403,13 @@ export function createBootstrap() {
                     password: this.ntfyConfig.password,
                     clearPassword: this.ntfyConfig.clearPassword,
                     captureDir: this.ntfyConfig.captureDir,
+                    tags: this.ntfyConfig.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
                 });
                 this.ntfyConfig.passwordConfigured = result.passwordConfigured;
                 this.ntfyConfig.password = '';
                 this.ntfyConfig.clearPassword = false;
                 this.ntfyConfig.username = result.username;
+                this.ntfyConfig.tags = result.tags.join(', ');
                 this.toast(this.t('settings.ntfy_saved'), { type: 'success' });
             } catch (error) {
                 this.toast(error.detail || error.message || this.t('settings.ntfy_save_failed'), { type: 'error' });

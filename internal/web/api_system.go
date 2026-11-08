@@ -59,12 +59,13 @@ type ConfigResponse struct {
 }
 
 type NtfyStatus struct {
-	Enabled            bool   `json:"enabled"`
-	ServerURL          string `json:"serverUrl"`
-	Topic              string `json:"topic"`
-	CaptureDir         string `json:"captureDir"`
-	Username           string `json:"username"`
-	PasswordConfigured bool   `json:"passwordConfigured"`
+	Enabled            bool     `json:"enabled"`
+	ServerURL          string   `json:"serverUrl"`
+	Topic              string   `json:"topic"`
+	CaptureDir         string   `json:"captureDir"`
+	Tags               []string `json:"tags"`
+	Username           string   `json:"username"`
+	PasswordConfigured bool     `json:"passwordConfigured"`
 }
 
 func (h *SystemHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
@@ -90,6 +91,7 @@ func (h *SystemHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 			ServerURL:          ntfySettings.ServerURL,
 			Topic:              ntfySettings.Topic,
 			CaptureDir:         ntfySettings.CaptureDir,
+			Tags:               ntfySettings.Tags,
 			Username:           ntfySettings.Username,
 			PasswordConfigured: ntfySettings.Password != "",
 		},
@@ -104,13 +106,14 @@ func (h *SystemHandler) UpdateNtfyConfig(w http.ResponseWriter, r *http.Request)
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var payload struct {
-		Enabled       bool   `json:"enabled"`
-		ServerURL     string `json:"serverUrl"`
-		Topic         string `json:"topic"`
-		Username      string `json:"username"`
-		Password      string `json:"password"`
-		ClearPassword bool   `json:"clearPassword"`
-		CaptureDir    string `json:"captureDir"`
+		Enabled       bool     `json:"enabled"`
+		ServerURL     string   `json:"serverUrl"`
+		Topic         string   `json:"topic"`
+		Username      string   `json:"username"`
+		Password      string   `json:"password"`
+		ClearPassword bool     `json:"clearPassword"`
+		CaptureDir    string   `json:"captureDir"`
+		Tags          []string `json:"tags"`
 	}
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -136,6 +139,14 @@ func (h *SystemHandler) UpdateNtfyConfig(w http.ResponseWriter, r *http.Request)
 	settings.Topic = strings.TrimSpace(payload.Topic)
 	settings.Username = strings.TrimSpace(payload.Username)
 	settings.CaptureDir = strings.TrimSpace(payload.CaptureDir)
+	if payload.Tags != nil {
+		settings.Tags = config.NormalizeNtfyTags(payload.Tags)
+	}
+	if len(settings.Tags) == 0 {
+		h.cfg.SettingsMu.Unlock()
+		RespondError(w, http.StatusBadRequest, "At least one ntfy capture tag is required")
+		return
+	}
 	if payload.ClearPassword {
 		settings.Password = ""
 	} else if password != "" {
@@ -173,6 +184,7 @@ func (h *SystemHandler) UpdateNtfyConfig(w http.ResponseWriter, r *http.Request)
 		ServerURL:          settings.ServerURL,
 		Topic:              settings.Topic,
 		CaptureDir:         settings.CaptureDir,
+		Tags:               settings.Tags,
 		Username:           settings.Username,
 		PasswordConfigured: settings.Password != "",
 	})

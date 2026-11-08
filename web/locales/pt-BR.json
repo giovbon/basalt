@@ -316,6 +316,8 @@
     "ntfy_password_optional": "Opcional para tópicos públicos",
     "ntfy_clear_password": "Remover senha salva",
     "ntfy_capture_dir": "Pasta de captura (relativa ao vault)",
+    "ntfy_tags": "Tags para as notas capturadas (separadas por vírgula)",
+    "ntfy_tags_placeholder": "ntfy, captura",
     "ntfy_save": "Salvar configuração ntfy",
     "ntfy_saving": "Salvando...",
     "ntfy_saved": "Configuração ntfy salva.",

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"golang.org/x/crypto/bcrypt"
@@ -218,6 +219,7 @@ func TestLoadNtfySettings(t *testing.T) {
   username: "ntfy-user"
   password: "secret"
   capture_dir: "Capturas/ntfy"
+  tags: [mobile, quick-capture]
 `, "1.0.0")
 
 	cfg, err := Load(configPath, versionPath)
@@ -226,7 +228,8 @@ func TestLoadNtfySettings(t *testing.T) {
 	}
 	if !cfg.Ntfy.Enabled || cfg.Ntfy.ServerURL != "https://ntfy.example" ||
 		cfg.Ntfy.Topic != "my-inbox" || cfg.Ntfy.Username != "ntfy-user" || cfg.Ntfy.Password != "secret" ||
-		cfg.Ntfy.CaptureDir != filepath.Join("Capturas", "ntfy") {
+		cfg.Ntfy.CaptureDir != filepath.Join("Capturas", "ntfy") ||
+		!slices.Equal(cfg.Ntfy.Tags, []string{"mobile", "quick-capture"}) {
 		t.Errorf("Ntfy config = %#v", cfg.Ntfy)
 	}
 }
@@ -240,6 +243,7 @@ func TestLoadNtfyEnvironmentOverrides(t *testing.T) {
 	t.Setenv("NTFY_USERNAME", "env-user")
 	t.Setenv("NTFY_PASSWORD", "env-password")
 	t.Setenv("NTFY_CAPTURE_DIR", "Captured")
+	t.Setenv("NTFY_TAGS", " Phone, capture, phone ")
 
 	cfg, err := Load(configPath, versionPath)
 	if err != nil {
@@ -247,8 +251,26 @@ func TestLoadNtfyEnvironmentOverrides(t *testing.T) {
 	}
 	if !cfg.Ntfy.Enabled || cfg.Ntfy.ServerURL != "https://ntfy.example" ||
 		cfg.Ntfy.Topic != "env-inbox" || cfg.Ntfy.Username != "env-user" || cfg.Ntfy.Password != "env-password" ||
-		cfg.Ntfy.CaptureDir != "Captured" {
+		cfg.Ntfy.CaptureDir != "Captured" ||
+		!slices.Equal(cfg.Ntfy.Tags, []string{"phone", "capture"}) {
 		t.Errorf("Ntfy config = %#v", cfg.Ntfy)
+	}
+}
+
+func TestLoadNtfyDefaultsCaptureTag(t *testing.T) {
+	dir := t.TempDir()
+	configPath, versionPath := writeConfigAndVersion(t, dir, `ntfy:
+  enabled: true
+  server_url: "https://ntfy.example"
+  topic: "inbox"
+`, "1.0.0")
+
+	cfg, err := Load(configPath, versionPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(cfg.Ntfy.Tags, []string{"ntfy"}) {
+		t.Fatalf("Ntfy tags = %#v, want default ntfy tag", cfg.Ntfy.Tags)
 	}
 }
 
@@ -286,6 +308,7 @@ func TestSaveNtfyConfigPreservesOtherSettings(t *testing.T) {
 		Username:   "ntfy-user",
 		Password:   "secret",
 		CaptureDir: "Captura",
+		Tags:       []string{"ntfy", "inbox"},
 	}
 
 	if err := SaveNtfyConfig(configPath, settings); err != nil {
@@ -298,7 +321,10 @@ func TestSaveNtfyConfigPreservesOtherSettings(t *testing.T) {
 	if cfg.App.Name != "Keep me" || !cfg.Search.Enabled {
 		t.Errorf("unrelated config was changed: app=%#v search=%#v", cfg.App, cfg.Search)
 	}
-	if cfg.Ntfy != settings {
+	if cfg.Ntfy.Enabled != settings.Enabled || cfg.Ntfy.ServerURL != settings.ServerURL ||
+		cfg.Ntfy.Topic != settings.Topic || cfg.Ntfy.Username != settings.Username ||
+		cfg.Ntfy.Password != settings.Password || cfg.Ntfy.CaptureDir != settings.CaptureDir ||
+		!slices.Equal(cfg.Ntfy.Tags, settings.Tags) {
 		t.Errorf("Ntfy config = %#v, want %#v", cfg.Ntfy, settings)
 	}
 	info, err := os.Stat(configPath)

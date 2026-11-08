@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"notediscovery/internal/config"
+	"notediscovery/internal/vault"
 )
 
 func TestCaptureEventSavesNoteAndAttachmentIdempotently(t *testing.T) {
@@ -31,6 +32,7 @@ func TestCaptureEventSavesNoteAndAttachmentIdempotently(t *testing.T) {
 		Username:   "ntfy-user",
 		Password:   "test-password",
 		CaptureDir: "Captura",
+		Tags:       []string{" Mobile ", "ntfy", "mobile"},
 	}, notesDir)
 	if err != nil {
 		t.Fatal(err)
@@ -68,6 +70,9 @@ func TestCaptureEventSavesNoteAndAttachmentIdempotently(t *testing.T) {
 		!strings.Contains(string(note), "![[20231114-221320-Ab12-photo.png]]") ||
 		!strings.Contains(string(note), "Capturado em "+capturedAt+" UTC") {
 		t.Errorf("capture note missing message or attachment link: %s", note)
+	}
+	if got := vault.ParseTags(string(note)); strings.Join(got, ",") != "mobile,ntfy" {
+		t.Errorf("captured note tags = %v, want [mobile ntfy]", got)
 	}
 	attachment, err := os.ReadFile(filepath.Join(captureDir, "20231114-221320-Ab12-photo.png"))
 	if err != nil {
@@ -191,6 +196,9 @@ func TestListenSubscribesAndCapturesTextMessage(t *testing.T) {
 	}
 	if !strings.Contains(string(note), "captured text") {
 		t.Errorf("captured note = %q, want message text", note)
+	}
+	if got := vault.ParseTags(string(note)); strings.Join(got, ",") != "ntfy" {
+		t.Errorf("captured note tags = %v, want default [ntfy]", got)
 	}
 }
 

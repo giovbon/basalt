@@ -190,6 +190,9 @@
                                     <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);" for="ntfy-capture-dir" x-text="t('settings.ntfy_capture_dir')"></label>
                                     <input id="ntfy-capture-dir" type="text" required x-model="ntfyConfig.captureDir" class="w-full px-2 py-2 mb-3 text-sm rounded" style="background-color: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-primary);">
 
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);" for="ntfy-tags" x-text="t('settings.ntfy_tags')"></label>
+                                    <input id="ntfy-tags" type="text" required x-model="ntfyConfig.tags" class="w-full px-2 py-2 mb-3 text-sm rounded" style="background-color: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-primary);" :placeholder="t('settings.ntfy_tags_placeholder')">
+
                                     <button type="submit" :disabled="ntfyConfig.saving" class="w-full px-3 py-2 text-sm rounded transition-colors disabled:opacity-50" style="background-color: var(--accent-primary); color: var(--bg-primary);">
                                         <span x-text="ntfyConfig.saving ? t('settings.ntfy_saving') : t('settings.ntfy_save')"></span>
                                     </button>

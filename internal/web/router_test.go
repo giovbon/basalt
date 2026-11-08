@@ -64,13 +64,14 @@ func TestUpdateNtfyConfigSavesAndHidesPassword(t *testing.T) {
 	var updated bool
 	systemHandler := NewSystemHandler(s.cfg, s.vault, nil, func(cfg config.NtfyConfig) error {
 		updated = true
-		if !cfg.Enabled || cfg.Topic != "inbox" || cfg.Username != "ntfy-user" || cfg.Password != "secret" {
+		if !cfg.Enabled || cfg.Topic != "inbox" || cfg.Username != "ntfy-user" || cfg.Password != "secret" ||
+			strings.Join(cfg.Tags, ",") != "mobile,capture" {
 			t.Errorf("updated ntfy config = %#v", cfg)
 		}
 		return nil
 	})
 
-	body := bytes.NewBufferString(`{"enabled":true,"serverUrl":"https://ntfy.example","topic":"inbox","username":"ntfy-user","password":"secret","captureDir":"Captura"}`)
+	body := bytes.NewBufferString(`{"enabled":true,"serverUrl":"https://ntfy.example","topic":"inbox","username":"ntfy-user","password":"secret","captureDir":"Captura","tags":[" Mobile ","capture","mobile"]}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/ntfy/config", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -86,14 +87,15 @@ func TestUpdateNtfyConfigSavesAndHidesPassword(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &saved); err != nil {
 		t.Fatal(err)
 	}
-	if !saved.Enabled || !saved.PasswordConfigured || saved.Username != "ntfy-user" {
+	if !saved.Enabled || !saved.PasswordConfigured || saved.Username != "ntfy-user" ||
+		strings.Join(saved.Tags, ",") != "mobile,capture" {
 		t.Errorf("saved status = %#v, want enabled and credentials configured", saved)
 	}
 	if strings.Contains(rec.Body.String(), "secret") {
 		t.Fatal("response exposed the ntfy password")
 	}
 
-	body = bytes.NewBufferString(`{"enabled":true,"serverUrl":"https://ntfy.example","topic":"inbox","username":"ntfy-user","password":"","captureDir":"Captura"}`)
+	body = bytes.NewBufferString(`{"enabled":true,"serverUrl":"https://ntfy.example","topic":"inbox","username":"ntfy-user","password":"","captureDir":"Captura","tags":["mobile","capture"]}`)
 	req = httptest.NewRequest(http.MethodPost, "/api/ntfy/config", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
@@ -103,6 +105,15 @@ func TestUpdateNtfyConfigSavesAndHidesPassword(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"passwordConfigured":true`) {
 		t.Errorf("blank password replaced the saved password: %s", rec.Body.String())
+	}
+
+	body = bytes.NewBufferString(`{"enabled":true,"serverUrl":"https://ntfy.example","topic":"inbox","username":"ntfy-user","password":"","captureDir":"Captura","tags":[]}`)
+	req = httptest.NewRequest(http.MethodPost, "/api/ntfy/config", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	systemHandler.UpdateNtfyConfig(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("POST without capture tags status = %d, want 400", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/config", nil)

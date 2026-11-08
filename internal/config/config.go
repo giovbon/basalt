@@ -79,12 +79,30 @@ type AuthenticationConfig struct {
 }
 
 type NtfyConfig struct {
-	Enabled    bool   `yaml:"enabled"`
-	ServerURL  string `yaml:"server_url"`
-	Topic      string `yaml:"topic"`
-	Username   string `yaml:"username"`
-	Password   string `yaml:"password"`
-	CaptureDir string `yaml:"capture_dir"`
+	Enabled    bool     `yaml:"enabled"`
+	ServerURL  string   `yaml:"server_url"`
+	Topic      string   `yaml:"topic"`
+	Username   string   `yaml:"username"`
+	Password   string   `yaml:"password"`
+	CaptureDir string   `yaml:"capture_dir"`
+	Tags       []string `yaml:"tags"`
+}
+
+func NormalizeNtfyTags(tags []string) []string {
+	normalized := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		tag = strings.ToLower(strings.TrimSpace(tag))
+		if tag == "" {
+			continue
+		}
+		if _, exists := seen[tag]; exists {
+			continue
+		}
+		seen[tag] = struct{}{}
+		normalized = append(normalized, tag)
+	}
+	return normalized
 }
 
 func parseBoolEnv(val string) bool {
@@ -137,6 +155,7 @@ func Load(configPath, versionPath string) (*Config, error) {
 		Ntfy: NtfyConfig{
 			ServerURL:  "https://ntfy.sh",
 			CaptureDir: "Captura",
+			Tags:       []string{"ntfy"},
 		},
 	}
 
@@ -251,6 +270,13 @@ func Load(configPath, versionPath string) (*Config, error) {
 	}
 	if captureDir := strings.TrimSpace(os.Getenv("NTFY_CAPTURE_DIR")); captureDir != "" {
 		cfg.Ntfy.CaptureDir = captureDir
+	}
+	if tags := strings.TrimSpace(os.Getenv("NTFY_TAGS")); tags != "" {
+		cfg.Ntfy.Tags = strings.Split(tags, ",")
+	}
+	cfg.Ntfy.Tags = NormalizeNtfyTags(cfg.Ntfy.Tags)
+	if len(cfg.Ntfy.Tags) == 0 {
+		cfg.Ntfy.Tags = []string{"ntfy"}
 	}
 	if cfg.Ntfy.Enabled {
 		if cfg.Ntfy.Topic == "" {
