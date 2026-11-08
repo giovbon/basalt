@@ -29,6 +29,10 @@ export function createState() {
             saving: false,
         },
         notes: [],
+        treeSelectionMode: false,
+        selectedTreeItems: [],
+        treeSelectionAnchor: null,
+        deletingSelectedTreeItems: false,
 
         // True while /api/notes is in flight. Drives the "Loading your vault…"
         // placeholder + the delayed overlay (notesLoadingShowOverlay).

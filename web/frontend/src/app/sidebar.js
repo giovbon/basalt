@@ -431,6 +431,169 @@ export function createSidebar() {
             this.allFolders = this.allFolders.filter(f => f !== folderPath && !f.startsWith(prefix));
             this.notes = this.notes.filter(n => !n.path.startsWith(prefix));
         },
+
+        toggleTreeSelectionMode() {
+            this.treeSelectionMode = !this.treeSelectionMode;
+            this.selectedTreeItems = [];
+            this.treeSelectionAnchor = null;
+            this.buildFolderTree();
+        },
+
+        setTreeItemSelected(path, type, selected) {
+            const matches = item => item.path === path && item.type === type;
+            if (!selected) {
+                this.selectedTreeItems = this.selectedTreeItems.filter(item => !matches(item));
+                this.syncTreeSelectionCheckboxes();
+                return;
+            }
+
+            if (this.selectedTreeItems.some(item => matches(item)
+                || (item.type === 'folder' && path.startsWith(item.path + '/')))) {
+                this.syncTreeSelectionCheckboxes();
+                return;
+            }
+
+            if (type === 'folder') {
+                this.selectedTreeItems = this.selectedTreeItems.filter(item =>
+                    !item.path.startsWith(path + '/')
+                );
+            }
+            this.selectedTreeItems = [...this.selectedTreeItems, { path, type }];
+            this.syncTreeSelectionCheckboxes();
+        },
+
+        syncTreeSelectionCheckboxes() {
+            document.querySelectorAll('.tree-select-checkbox').forEach(checkbox => {
+                checkbox.checked = this.selectedTreeItems.some(item =>
+                    item.path === checkbox.dataset.path && item.type === checkbox.dataset.type
+                );
+            });
+        },
+
+        toggleTreeItemSelection(path, type) {
+            const selected = this.selectedTreeItems.some(item => item.path === path && item.type === type);
+            this.setTreeItemSelected(path, type, !selected);
+            this.treeSelectionAnchor = { path, type };
+        },
+
+        selectTreeItemRange(path, type, selected) {
+            const checkboxes = [...document.querySelectorAll('.tree-select-checkbox')];
+            const targetIndex = checkboxes.findIndex(checkbox =>
+                checkbox.dataset.path === path && checkbox.dataset.type === type
+            );
+            const anchorIndex = this.treeSelectionAnchor
+                ? checkboxes.findIndex(checkbox =>
+                    checkbox.dataset.path === this.treeSelectionAnchor.path
+                    && checkbox.dataset.type === this.treeSelectionAnchor.type
+                )
+                : -1;
+
+            if (anchorIndex < 0 || targetIndex < 0) {
+                this.setTreeItemSelected(path, type, selected);
+                this.treeSelectionAnchor = { path, type };
+                return;
+            }
+
+            const start = Math.min(anchorIndex, targetIndex);
+            const end = Math.max(anchorIndex, targetIndex);
+            for (const checkbox of checkboxes.slice(start, end + 1)) {
+                this.setTreeItemSelected(checkbox.dataset.path, checkbox.dataset.type, selected);
+            }
+        },
+
+        handleTreeCheckboxClick(checkbox, event) {
+            event.stopPropagation();
+            if (event.shiftKey) {
+                this.selectTreeItemRange(checkbox.dataset.path, checkbox.dataset.type, checkbox.checked);
+                return;
+            }
+            this.setTreeItemSelected(checkbox.dataset.path, checkbox.dataset.type, checkbox.checked);
+            this.treeSelectionAnchor = {
+                path: checkbox.dataset.path,
+                type: checkbox.dataset.type,
+            };
+        },
+
+        renderTreeSelectCheckbox(path, type) {
+            if (!this.treeSelectionMode) return '';
+            const checked = this.selectedTreeItems.some(item => item.path === path && item.type === type);
+            const label = this.escapeHtmlAttr(this.t('sidebar.select_item', { name: path }));
+            return `<input type="checkbox" class="tree-select-checkbox" data-path="${this.escapeHtmlAttr(path)}" data-type="${type}" aria-label="${label}" ${checked ? 'checked' : ''} onclick="window.$root.handleTreeCheckboxClick(this, event)" style="width: 14px; height: 14px; flex: 0 0 14px; accent-color: var(--accent-primary); cursor: pointer;">`;
+        },
+
+        async deleteSelectedTreeItems() {
+            if (this.deletingSelectedTreeItems || this.selectedTreeItems.length === 0) return;
+
+            const selectedItems = [...this.selectedTreeItems];
+            const items = selectedItems.filter(item => !selectedItems.some(folder =>
+                folder.type === 'folder' && folder.path !== item.path
+                && item.path.startsWith(folder.path + '/')
+            ));
+            const ok = await this.confirmModalAsk({
+                message: this.t('sidebar.confirm_delete_selected', { count: items.length }),
+            });
+            if (!ok) return;
+
+            this.deletingSelectedTreeItems = true;
+            const deletedItems = [];
+            const failedItems = [];
+            for (const item of items) {
+                try {
+                    const endpoint = item.type === 'folder' ? '/api/folders/' : '/api/notes/';
+                    await api.send(`${endpoint}${encodeVaultPath(item.path)}`, 'DELETE');
+                    deletedItems.push(item);
+                } catch (error) {
+                    failedItems.push({ ...item, error });
+                }
+            }
+
+            const deletedFolders = deletedItems.filter(item => item.type === 'folder');
+            const deletedFiles = deletedItems.filter(item => item.type !== 'folder');
+            for (const item of deletedFolders) {
+                this._optimisticRemoveFolderTree(item.path);
+                const prefix = item.path + '/';
+                this.expandedFolders.forEach(path => {
+                    if (path === item.path || path.startsWith(prefix)) this.expandedFolders.delete(path);
+                });
+            }
+            for (const item of deletedFiles) {
+                this._optimisticRemoveNote(item.path);
+            }
+
+            if (deletedItems.length > 0) {
+                const isDeletedPath = path => deletedFiles.some(item => item.path === path)
+                    || deletedFolders.some(item => path.startsWith(item.path + '/'));
+                const favorites = this.favorites.filter(path => !isDeletedPath(path));
+                if (favorites.length !== this.favorites.length) {
+                    this.favorites = favorites;
+                    this.favoritesSet = new Set(favorites);
+                    this.saveFavorites();
+                }
+
+                if (this.currentNote && isDeletedPath(this.currentNote)) {
+                    this._resetNoteState();
+                    window.history.replaceState({ homepageFolder: this.selectedHomepageFolder || '' }, '', '/');
+                } else if (this.currentMedia && isDeletedPath(this.currentMedia)) {
+                    this.closeMediaViewer();
+                    window.history.replaceState({ homepageFolder: this.selectedHomepageFolder || '' }, '', '/');
+                }
+
+                this._rebuildTreeAfterMutation();
+                await this.loadNotes({ silent: true });
+            }
+
+            this.selectedTreeItems = failedItems.map(({ path, type }) => ({ path, type }));
+            this.treeSelectionAnchor = failedItems.length > 0 ? this.treeSelectionAnchor : null;
+            this.treeSelectionMode = failedItems.length > 0;
+            if (failedItems.length > 0) {
+                const detail = failedItems[0].error.detail || failedItems[0].error.message;
+                this.toast(this.t('sidebar.bulk_delete_partial', {
+                    count: failedItems.length,
+                    error: detail,
+                }), { type: 'error' });
+            }
+            this.deletingSelectedTreeItems = false;
+        },
         
         // Cascade: rename the folder, its descendant folders, and rewrite paths
         // of every note inside.
@@ -468,7 +631,16 @@ export function createSidebar() {
         },
         
         // Folder handlers - read from dataset
-        handleFolderClick(el) {
+        handleFolderClick(el, event) {
+            if (this.treeSelectionMode) {
+                const path = el.dataset.path;
+                if (event && event.shiftKey) {
+                    this.selectTreeItemRange(path, 'folder', true);
+                } else {
+                    this.toggleTreeItemSelection(path, 'folder');
+                }
+                return;
+            }
             this.toggleFolder(el.dataset.path);
         },
         handleFolderDragOver(el, event) {
@@ -511,7 +683,17 @@ export function createSidebar() {
         },
         
         // Item (note/media) handlers - read from dataset
-        handleItemClick(el) {
+        handleItemClick(el, event) {
+            if (this.treeSelectionMode) {
+                const path = el.dataset.path;
+                const type = el.dataset.type || 'note';
+                if (event && event.shiftKey) {
+                    this.selectTreeItemRange(path, type, true);
+                } else {
+                    this.toggleTreeItemSelection(path, type);
+                }
+                return;
+            }
             this.openItem(el.dataset.path, el.dataset.type);
         },
         handleDeleteItemClick(el, event) {
@@ -557,11 +739,12 @@ export function createSidebar() {
                         ondragenter="window.$root.handleFolderDragOver(this, event)"
                         ondragleave="window.$root.handleFolderDragLeave(this)"
                         ondrop="window.$root.handleFolderDrop(this, event)"
-                        onclick="window.$root.handleFolderClick(this)"
+                        onclick="window.$root.handleFolderClick(this, event)"
                         class="tree-row folder-item tree--folder${isExpanded ? ' is-expanded' : ''}"
                         title="${esc(folder.path)}"
                     >
-                        <span class="tree-chevron${isExpanded ? ' is-open' : ''}" aria-hidden="true">
+                        ${this.renderTreeSelectCheckbox(folder.path, 'folder')}
+                        <span class="tree-chevron${isExpanded ? ' is-open' : ''}" aria-hidden="true" style="${this.treeSelectionMode ? 'display:none;' : ''}">
                             <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4V4z"/></svg>
                         </span>
                         ${treeIconSvg('folder')}
@@ -660,12 +843,13 @@ export function createSidebar() {
                     draggable="true"
                     ondragstart="window.$root.onItemDragStart(this.dataset.path, this.dataset.type || 'note', event)"
                     ondragend="window.$root.onItemDragEnd()"
-                    onclick="window.$root.handleItemClick(this)"
+                    onclick="window.$root.handleItemClick(this, event)"
                     class="tree-row note-item ${treeKindClass(kind)}${isPdf ? ' note-item--has-rename' : ''}${isCurrent ? ' tree-active active' : ''}"
                     title="${esc(note.path)}"
                     style="${isCurrent ? 'background-color: var(--accent-light); color: var(--accent-primary);' : ''}"
                 >
-                    <span class="tree-indent" aria-hidden="true"></span>
+                    ${this.renderTreeSelectCheckbox(note.path, note.type)}
+                    <span class="tree-indent" aria-hidden="true" style="${this.treeSelectionMode ? 'display:none;' : ''}"></span>
                     ${icon}
                     <span class="tree-label">${esc(note.name)}${ext ? `<span class="tree-ext">${esc(ext)}</span>` : ''}</span>
                     ${isPdf ? `

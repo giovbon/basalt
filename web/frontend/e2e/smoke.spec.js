@@ -162,3 +162,39 @@ test('renders a markmap note beside its editable Markdown source', async ({ page
   const darkPreviewColor = await page.locator('[data-testid="preview"]').evaluate((preview) => getComputedStyle(preview).color);
   expect(darkMapColor).toBe(darkPreviewColor);
 });
+
+test('deletes multiple selected notes and folders with one confirmation', async ({ page }) => {
+  await page.locator('[data-testid="tree-selection-toggle"]').click();
+
+  await page.locator('.note-item[data-path="Welcome.md"] .tree-select-checkbox').check();
+  await page.locator('.folder-item[data-path="Projects"] .tree-select-checkbox').check();
+  await expect(page.locator('[data-testid="tree-selection-toolbar"]')).toContainText('2 marcados');
+
+  await page.locator('[data-testid="delete-selected-items"]').click();
+  const confirmDialog = page.locator('[role="alertdialog"]');
+  await expect(confirmDialog).toContainText('Excluir permanentemente 2 itens selecionados');
+  await confirmDialog.locator('button').last().click();
+
+  await expect(page.locator('.note-item[data-path="Welcome.md"]')).toHaveCount(0);
+  await expect(page.locator('.folder-item[data-path="Projects"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="tree-selection-toolbar"]')).toBeHidden();
+
+  const response = await page.request.get('/api/notes');
+  const data = await response.json();
+  expect(data.notes.some(note => note.path.startsWith('Projects/'))).toBe(false);
+  expect(data.folders.some(folder => folder.startsWith('Projects'))).toBe(false);
+});
+
+test('selects the visible range with Shift', async ({ page }) => {
+  await page.locator('[data-testid="tree-selection-toggle"]').click();
+  const checkboxes = page.locator('.tree-row:visible .tree-select-checkbox');
+  const count = await checkboxes.count();
+  expect(count).toBeGreaterThan(1);
+
+  await checkboxes.nth(0).click();
+  await checkboxes.nth(count - 1).click({ modifiers: ['Shift'] });
+
+  for (let index = 0; index < count; index += 1) {
+    await expect(checkboxes.nth(index)).toBeChecked();
+  }
+});

@@ -95,6 +95,20 @@
                                 <span x-text="t('sidebar.folders_and_notes')"></span>
                                 <div class="flex gap-0.5">
                                     <button
+                                        data-testid="tree-selection-toggle"
+                                        @click="toggleTreeSelectionMode()"
+                                        class="text-xs px-1.5 py-0.5 rounded transition-all hover:scale-110"
+                                        :title="t(treeSelectionMode ? 'sidebar.cancel_selection' : 'sidebar.select_items')"
+                                        :aria-label="t(treeSelectionMode ? 'sidebar.cancel_selection' : 'sidebar.select_items')"
+                                        style="opacity: 0.7;"
+                                        onmouseover="this.style.opacity='1'"
+                                        onmouseout="this.style.opacity='0.7'"
+                                    >
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"></path>
+                                        </svg>
+                                    </button>
+                                    <button
                                         @click="cycleSortMode()"
                                         class="text-xs px-1.5 py-0.5 rounded transition-all hover:scale-110"
                                         :title="t('sidebar.sort_' + sortMode)"
@@ -128,6 +142,30 @@
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 13h4"></path>
                                         </svg>
                                     </button>
+                                </div>
+                            </div>
+                            <div
+                                x-show="treeSelectionMode"
+                                data-testid="tree-selection-toolbar"
+                                class="flex items-center justify-between gap-2 px-2 py-1 mb-1 rounded"
+                                style="background-color: var(--bg-hover);"
+                            >
+                                <span class="text-xs" style="color: var(--text-secondary);" x-text="t('sidebar.selected_count', { count: selectedTreeItems.length })"></span>
+                                <div class="flex items-center gap-1">
+                                    <button
+                                        data-testid="delete-selected-items"
+                                        @click="deleteSelectedTreeItems()"
+                                        :disabled="selectedTreeItems.length === 0 || deletingSelectedTreeItems"
+                                        class="text-xs px-2 py-1 rounded text-white disabled:opacity-50"
+                                        style="background-color: var(--danger-primary, #dc2626);"
+                                        x-text="t('sidebar.delete_selected')"
+                                    ></button>
+                                    <button
+                                        @click="toggleTreeSelectionMode()"
+                                        class="text-xs px-2 py-1 rounded"
+                                        style="color: var(--text-secondary);"
+                                        x-text="t('common.cancel')"
+                                    ></button>
                                 </div>
                             </div>
                             <!-- Root drop zone: only rendered while dragging, so the sidebar has no permanent hint box. -->
