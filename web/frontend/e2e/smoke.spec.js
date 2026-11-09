@@ -227,6 +227,26 @@ test('follows a wikilink from the preview', async ({ page }) => {
   await expect(page).toHaveURL(/\/Projects\/Roadmap(\?.*)?$/);
 });
 
+test('suggests headings and follows a heading wikilink', async ({ page }) => {
+  await page.locator('.note-item[data-path="Welcome.md"]').click();
+
+  const editor = page.locator('#note-editor');
+  await editor.fill('See [[Roadmap#');
+  const headingSuggestion = page.locator('#wikilink-autocomplete .wikilink-autocomplete-item', {
+    hasText: 'Phase 1',
+  });
+  await expect(headingSuggestion).toBeVisible();
+  await headingSuggestion.click();
+
+  await expect(editor).toHaveValue('See [[Roadmap#phase-1]]');
+  const headingLink = page.locator('[data-testid="preview"] a.wikilink');
+  await expect(headingLink).toHaveAttribute('href', '/Projects/Roadmap#phase-1');
+  await headingLink.click();
+
+  await expect(page).toHaveURL(/\/Projects\/Roadmap(\?.*)?$/);
+  await expect(editor).toHaveValue(/## Phase 1/);
+});
+
 test('persists the theme choice across a reload', async ({ page }) => {
   await page.locator('[data-testid="rail-settings"]').click();
   await page.locator('[data-testid="theme-select"]').selectOption('dark');

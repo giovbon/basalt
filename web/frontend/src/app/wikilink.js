@@ -3,6 +3,43 @@
 // Split out of the former monolith src/main.js; noteApp() in main.js composes
 // this factory's object with the other feature slices (see compose()).
 
+import * as api from '../core/api.js';
+import { encodeVaultPath } from '../core/utils.js';
+
+function extractHeadingOutline(content) {
+    const lines = content.split('\n');
+    let start = 0;
+    if (lines[0]?.trim() === '---') {
+        const end = lines.findIndex((line, index) => index > 0 && line.trim() === '---');
+        if (end !== -1) start = end + 1;
+    }
+
+    const outline = [];
+    const slugCounts = new Map();
+    let inCodeBlock = false;
+    for (let index = start; index < lines.length; index++) {
+        const line = lines[index];
+        if (/^\s{0,3}(?:```|~~~)/.test(line)) {
+            inCodeBlock = !inCodeBlock;
+            continue;
+        }
+        if (inCodeBlock) continue;
+
+        const match = line.match(/^(#{1,6})\s+(.+)$/);
+        if (!match) continue;
+        const text = match[2].trim();
+        const baseSlug = text.toLowerCase().replace(/[^a-z0-9_ -]/g, '').replace(/ +/g, '-').replace(/-+/g, '-');
+        const duplicateCount = slugCounts.get(baseSlug) || 0;
+        slugCounts.set(baseSlug, duplicateCount + 1);
+        outline.push({
+            level: match[1].length,
+            text,
+            slug: duplicateCount ? `${baseSlug}-${duplicateCount}` : baseSlug,
+        });
+    }
+    return outline;
+}
+
 export function createWikilink() {
     return {
         
@@ -151,8 +188,8 @@ export function createWikilink() {
         },
 
         // ---- Wikilink / media autocomplete -------------------------------------
-        // Triggered while typing inside [[ (notes) or ![[ (media). Suggestions are
-        // computed client-side from the already-loaded notes list; no backend calls.
+        // Note/media suggestions use the loaded vault list. Heading suggestions
+        // load and cache the target note's outline when the query contains `#`.
 
         // Inspect the text before the caret and open/refresh the popup when the
         // caret sits inside an unfinished [[ / ![[ token.
@@ -171,7 +208,24 @@ export function createWikilink() {
             // A valid in-progress target has no bracket, pipe, or newline, and stays short.
             if (query.length > 100 || /[\[\]\n|]/.test(query)) { this.wlClose(); return; }
 
-            this.wikilinkAutocomplete.mode = (idx > 0 && before[idx - 1] === '!') ? 'media' : 'note';
+            const isMedia = idx > 0 && before[idx - 1] === '!';
+            if (!isMedia && query.includes('#')) {
+                const hashIndex = query.indexOf('#');
+                const pageTarget = query.substring(0, hashIndex);
+                const headingQuery = query.substring(hashIndex + 1);
+                const sourceFolder = this.currentNote && this.currentNote.includes('/')
+                    ? this.currentNote.substring(0, this.currentNote.lastIndexOf('/'))
+                    : '';
+                this.wikilinkAutocomplete.mode = 'heading';
+                this.wikilinkAutocomplete.tokenStart = idx + 2;
+                this.wikilinkAutocomplete.query = headingQuery;
+                this.wlClose();
+                const generation = this._wlHeadingGeneration;
+                this.wlLoadHeadingItems(pageTarget, sourceFolder, headingQuery, idx + 2, generation);
+                return;
+            }
+
+            this.wikilinkAutocomplete.mode = isMedia ? 'media' : 'note';
             this.wikilinkAutocomplete.tokenStart = idx + 2;
             this.wikilinkAutocomplete.query = query;
             this.wlComputeItems();
@@ -183,6 +237,73 @@ export function createWikilink() {
             this.$nextTick(() => this.wlUpdatePosition());
         },
 
+        async wlLoadHeadingItems(pageTarget, sourceFolder, query, tokenStart, generation) {
+            let note;
+            if (pageTarget) {
+                const resolved = this.resolveWikiLink(pageTarget, sourceFolder);
+                note = this.notes.find((item) =>
+                    item.type === 'note' &&
+                    item.path.replace(/\.md$/i, '').toLowerCase() === (resolved || '').toLowerCase()
+                );
+            } else {
+                note = this.notes.find((item) => item.path === this.currentNote);
+            }
+            if (!note) return;
+
+            let outlinePromise;
+            if (note.path === this.currentNote) {
+                outlinePromise = Promise.resolve(extractHeadingOutline(this.noteContent || ''));
+            } else {
+                if (!this._wikilinkOutlineCache.has(note.path)) {
+                    const request = api.getJSON(`/api/notes/${encodeVaultPath(note.path)}`)
+                        .then((data) => {
+                            if (!Array.isArray(data.outline)) {
+                                throw new Error(`Note response did not include an outline: ${note.path}`);
+                            }
+                            return data.outline;
+                        })
+                        .catch((error) => {
+                            if (this._wikilinkOutlineCache.get(note.path) === request) {
+                                this._wikilinkOutlineCache.delete(note.path);
+                            }
+                            throw error;
+                        });
+                    this._wikilinkOutlineCache.set(note.path, request);
+                }
+                outlinePromise = this._wikilinkOutlineCache.get(note.path);
+            }
+
+            try {
+                const outline = await outlinePromise;
+                const wa = this.wikilinkAutocomplete;
+                const textarea = document.getElementById('note-editor');
+                const expectedTarget = `${pageTarget}#${query}`;
+                if (generation !== this._wlHeadingGeneration
+                    || document.activeElement !== textarea
+                    || textarea.selectionStart !== textarea.selectionEnd
+                    || wa.mode !== 'heading'
+                    || wa.query !== query
+                    || wa.tokenStart !== tokenStart
+                    || this.noteContent.substring(tokenStart, textarea.selectionStart) !== expectedTarget) return;
+
+                wa.headingItems = outline.map((heading) => ({
+                    label: heading.text,
+                    secondary: `#${heading.slug}`,
+                    insert: `${pageTarget ? `${pageTarget}#` : '#'}${heading.slug}`,
+                    kind: 'heading',
+                    slug: heading.slug,
+                }));
+                this.wlComputeItems();
+                if (wa.items.length === 0) { this.wlClose(); return; }
+                wa.activeIndex = 0;
+                wa.open = true;
+                this._wlPosRetries = 0;
+                this.$nextTick(() => this.wlUpdatePosition());
+            } catch (error) {
+                console.error('Failed to load wikilink heading suggestions:', error);
+            }
+        },
+
         // Build the (capped) suggestion list for the current query and mode.
         // `![[` suggests media only; `[[` suggests notes as link targets plus
         // media files (label keeps the extension, so accepting one inserts
@@ -192,6 +313,21 @@ export function createWikilink() {
             const q = this.wikilinkAutocomplete.query.trim().toLowerCase();
             const isMedia = this.wikilinkAutocomplete.mode === 'media';
             const results = [];
+
+            if (this.wikilinkAutocomplete.mode === 'heading') {
+                for (const item of this.wikilinkAutocomplete.headingItems || []) {
+                    const labelLower = item.label.toLowerCase();
+                    const slugLower = item.slug.toLowerCase();
+                    if (q && !labelLower.includes(q) && !slugLower.includes(q)) continue;
+                    results.push({
+                        ...item,
+                        prefix: q ? labelLower.startsWith(q) || slugLower.startsWith(q) : true,
+                    });
+                }
+                results.sort((a, b) => (b.prefix - a.prefix) || a.label.localeCompare(b.label));
+                this.wikilinkAutocomplete.items = results.slice(0, WL_LIMIT);
+                return;
+            }
 
             for (const note of this.notes) {
                 const isNote = note.type === 'note';
@@ -306,6 +442,7 @@ export function createWikilink() {
         },
 
         wlClose() {
+            this._wlHeadingGeneration = (this._wlHeadingGeneration || 0) + 1;
             this.wikilinkAutocomplete.open = false;
         },
 

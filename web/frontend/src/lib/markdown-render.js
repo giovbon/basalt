@@ -232,10 +232,17 @@ export function renderMarkdownSync({
         (match, target, displayText) => {
             const linkTarget = target.trim();
             const display = displayText ? displayText.trim() : linkTarget;
-            const resolved = resolveWikiLink(linkTarget, currentNote ? currentNote.split('/').slice(0, -1).join('/') : '');
+            const hashIndex = linkTarget.indexOf('#');
+            const noteTarget = hashIndex === -1 ? linkTarget : linkTarget.substring(0, hashIndex);
+            const anchor = hashIndex === -1 ? null : linkTarget.substring(hashIndex + 1);
+            const resolved = resolveWikiLink(
+                noteTarget,
+                currentNote ? currentNote.split('/').slice(0, -1).join('/') : '',
+            );
             if (resolved) {
                 const safeDisplay = display.replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>');
-                return preserveRenderedHtml(`<a href="/${resolved}" class="wikilink" data-wikilink="${linkTarget.replace(/"/g, '"')}">${safeDisplay}</a>`);
+                const href = `/${resolved}${anchor === null ? '' : `#${encodeURIComponent(anchor)}`}`;
+                return preserveRenderedHtml(`<a href="${href}" class="wikilink" data-wikilink="${linkTarget.replace(/"/g, '"')}">${safeDisplay}</a>`);
             }
             const safeDisplay = display.replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>');
             return preserveRenderedHtml(`<span class="wikilink-broken" title="Note not found">${safeDisplay}</span>`);

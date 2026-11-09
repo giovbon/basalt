@@ -108,6 +108,22 @@ test('wikilinks are converted to anchors', () => {
     assert.match(html, /My Note/);
 });
 
+test('wikilinks with heading anchors resolve the note and preserve the anchor', () => {
+    const deps = makeMockDeps({
+        resolveWikiLink: (target, source) => target === 'Projects/Roadmap' && source === 'Projects'
+            ? 'Projects/Roadmap'
+            : null,
+    });
+    const html = renderMarkdownSync({
+        noteContent: 'See [[Projects/Roadmap#Phase 1]]',
+        currentNote: 'Projects/Overview.md',
+        ...deps,
+    });
+
+    assert.match(html, /href="\/Projects\/Roadmap#Phase%201"/);
+    assert.match(html, /data-wikilink="Projects\/Roadmap#Phase 1"/);
+});
+
 test('broken wikilinks get broken class', () => {
     const deps = makeMockDeps({
         resolveWikiLink: () => null,

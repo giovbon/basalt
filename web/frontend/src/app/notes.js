@@ -693,6 +693,7 @@ export function createNotes() {
             // A hover preview for this note would otherwise show the version
             // from before this save for up to its cache TTL.
             if (this._linkPreviewCache) this._linkPreviewCache.delete(notePath);
+            if (this._wikilinkOutlineCache) this._wikilinkOutlineCache.delete(notePath);
 
             if (notePath === this.currentNote) {
                 this.noteBaseHash = result.hash || null;

@@ -18,7 +18,10 @@ function makeVault(notes) {
         _mediaLookup: new Map(),
         _mediaLookupStem: new Map(),
         _noteNameCounts: new Map(),
-        wikilinkAutocomplete: { mode: 'note', query: '', items: [], activeIndex: 0, open: false },
+        _wikilinkOutlineCache: new Map(),
+        wikilinkAutocomplete: {
+            mode: 'note', query: '', items: [], headingItems: [], activeIndex: 0, open: false,
+        },
         ...createWikilink(),
     };
 }
@@ -117,4 +120,19 @@ test('![[ autocomplete keeps suggesting media only', () => {
         ctx.wikilinkAutocomplete.items.map((i) => i.label),
         ['img.png'],
     );
+});
+
+test('heading autocomplete filters and inserts the page path with its heading slug', () => {
+    const ctx = build([note('Projects/Roadmap.md')]);
+    ctx.wikilinkAutocomplete.mode = 'heading';
+    ctx.wikilinkAutocomplete.query = 'phase';
+    ctx.wikilinkAutocomplete.headingItems = [
+        { label: 'Phase 1', slug: 'phase-1', insert: 'Roadmap#phase-1', kind: 'heading' },
+        { label: 'Search navigation', slug: 'search-navigation', insert: 'Roadmap#search-navigation', kind: 'heading' },
+    ];
+
+    ctx.wlComputeItems();
+
+    assert.deepEqual(ctx.wikilinkAutocomplete.items.map((item) => item.label), ['Phase 1']);
+    assert.equal(ctx.wikilinkAutocomplete.items[0].insert, 'Roadmap#phase-1');
 });

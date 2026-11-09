@@ -210,13 +210,15 @@ export function createState() {
         // Wikilink / media autocomplete (triggered by [[ for notes, ![[ for media)
         wikilinkAutocomplete: {
             open: false,
-            mode: 'note',        // 'note' | 'media'
+            mode: 'note',        // 'note' | 'media' | 'heading'
             query: '',
             tokenStart: 0,       // index in noteContent right after the opening [[
             items: [],           // [{label, secondary, insert, kind, prefix, modified}]
+            headingItems: [],
             activeIndex: 0,
             position: { top: 0, left: 0 },
         },
+        _wikilinkOutlineCache: new Map(),
         _noteNameCounts: new Map(), // lower note stem -> count, for name-vs-path insertion
         
         newButtonAction: 'chooser',
