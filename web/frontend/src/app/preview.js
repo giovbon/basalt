@@ -295,7 +295,11 @@ export function createPreview() {
                 setTimeout(() => {
                     const previewContent = document.querySelector('.markdown-preview');
                     if (previewContent) {
-                        MathJax.typesetPromise([previewContent]).catch((err) => {
+                        MathJax.typesetPromise([previewContent]).then(() => {
+                            // Typesetting replaces the math DOM, dropping any
+                            // search mark inside it.
+                            if (this.currentSearchHighlight) this._reapplySearchHighlights();
+                        }).catch((err) => {
                             console.error('MathJax typesetting failed:', err);
                         });
                     }
@@ -633,6 +637,10 @@ export function createPreview() {
                                     highlighter.highlightElement(block);
                                 }
                             });
+                            // highlightElement() rewrites the code block's
+                            // innerHTML, which drops search marks. Re-apply the
+                            // current query after the last block is done.
+                            if (this.currentSearchHighlight) this._reapplySearchHighlights();
                         }).catch((error) => {
                             console.error('Highlight.js failed to load:', error);
                         });

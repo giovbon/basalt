@@ -7,6 +7,7 @@ import { CONFIG, LOCAL_SETTINGS } from '../core/config.js';
 import { foldForSearch, foldedIndexForOriginal, isWholeWordMatch, lineStartOffset } from '../lib/search-fold.js';
 import {
     previewMarkIndexForSourceOffset,
+    previewMarkIndexForSourceOffsetBestEffort,
     searchHiddenRegions,
     sourceOffsetForLineColumn,
     spanOverlapsRegions,
@@ -187,13 +188,25 @@ export function createSearch() {
                 false
             );
             
+            // Text that is not note content, or that the renderer generated
+            // from something other than a visible source span. Code itself is
+            // note text (the preview shows it), so it is highlighted too.
+            const NON_SOURCE_TEXT = [
+                'button',
+                'script',
+                'style',
+                'textarea',
+                'noscript',
+                '.mermaid-rendered',
+                'code.language-mermaid',
+                '.basalt-query-table',
+                '.markmap-container',
+            ].join(', ');
+
             const textNodes = [];
             let node;
             while (node = walker.nextNode()) {
-                // Skip anything inside <code>/<pre>. closest() (rather than a
-                // parent check) also covers the copy buttons the renderer
-                // injects into every <pre>, whose text is not note content.
-                if (node.parentElement && node.parentElement.closest('code, pre')) {
+                if (node.parentElement && node.parentElement.closest(NON_SOURCE_TEXT)) {
                     continue;
                 }
                 textNodes.push(node);
@@ -293,9 +306,10 @@ export function createSearch() {
         },
 
         // Make the occurrence at line:column the active <mark> and scroll it
-        // into view. When the source-side numbering cannot be trusted (the
-        // term also appears in code, link targets, math, …) fall back to the
-        // mark nearest the block anchor for that line.
+        // into view. The exact mapping needs the hidden-region scanner and the
+        // rendered marks to agree; when they do not, keep the clicked
+        // occurrence's rank in source order, and only then fall back to the
+        // mark nearest the block anchor.
         _focusPreviewOccurrence(marks, targetLine, targetColumn, foldedTerm) {
             if (marks.length === 0) {
                 this.scrollPreviewToSourceLine(targetLine);
@@ -308,9 +322,19 @@ export function createSearch() {
             );
             let index = this._previewMarkIndexForSourceOffset(offset, foldedTerm, marks.length);
 
+            // A single unknown construct must not throw away the mapping for
+            // the whole note. Before falling back to the viewport, trust the
+            // clicked occurrence's rank in source order.
+            if (index === -2) {
+                index = this._previewMarkIndexForSourceOffsetBestEffort(
+                    offset, foldedTerm, marks.length
+                );
+            }
+
             if (index === -1) {
-                // The occurrence lives in frontmatter or in code: the preview
-                // has no mark for it (the editor still selects it).
+                // The occurrence lives in frontmatter, a link destination,
+                // image alt text, …: the preview has no mark for it (the
+                // editor still selects it).
                 marks.forEach((mark) => mark.classList.remove('active-match'));
                 this.scrollPreviewToSourceLine(targetLine);
                 this.currentMatchIndex = -1;
@@ -318,7 +342,8 @@ export function createSearch() {
             }
 
             if (index < 0) {
-                // Counts disagree: keep the old "nearest to the anchor" pick.
+                // Counts disagree beyond repair: keep the "nearest to the
+                // anchor" pick.
                 this.scrollPreviewToSourceLine(targetLine);
                 const container = this._domCache.previewContainer;
                 if (!container) return;
@@ -345,6 +370,17 @@ export function createSearch() {
         // Index of the <mark> that corresponds to a source offset (see lib/search-preview.js).
         _previewMarkIndexForSourceOffset(offset, foldedTerm, markCount) {
             return previewMarkIndexForSourceOffset(
+                this.noteContent || '',
+                offset,
+                foldedTerm,
+                markCount,
+                this.exactSearchMatch
+            );
+        },
+
+        // Tolerant version used when the exact count disagrees.
+        _previewMarkIndexForSourceOffsetBestEffort(offset, foldedTerm, markCount) {
+            return previewMarkIndexForSourceOffsetBestEffort(
                 this.noteContent || '',
                 offset,
                 foldedTerm,

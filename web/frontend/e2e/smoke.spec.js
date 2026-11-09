@@ -197,6 +197,30 @@ test('activates the clicked sidebar occurrence in Markdown-formatted text', asyn
   }
 });
 
+test('activates search occurrences in code blocks and indented code', async ({ page }) => {
+  await page.locator('[data-testid="rail-search"]').click();
+  await page.locator('[data-testid="search-input"]').fill('alpha');
+
+  const group = page.locator('.search-result-group', { hasText: 'SearchCode' });
+  await expect(group.locator('.search-result-header')).toBeVisible();
+  await group.locator('.search-result-header').click();
+  const searchMatches = group.locator('.search-match-row');
+  await expect(searchMatches).toHaveCount(6);
+
+  const preview = page.locator('[data-testid="preview"]');
+  await searchMatches.first().click();
+  // Wait for the async code highlighter: it rewrites the code block and the
+  // search marks must be re-applied afterwards.
+  await expect(preview.locator('pre code.hljs')).toHaveCount(2);
+  await expect(preview.locator('mark.search-highlight')).toHaveCount(6);
+
+  for (let index = 0; index < 6; index++) {
+    await searchMatches.nth(index).click();
+    await expect(preview.locator('mark.search-highlight.active-match'))
+      .toHaveAttribute('data-match-index', String(index));
+  }
+});
+
 test('expands TODOs by note and opens the highlighted occurrence', async ({ page }) => {
   await page.locator('[data-testid="rail-todos"]').click();
 

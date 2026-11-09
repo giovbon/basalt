@@ -1,9 +1,9 @@
 // Mapping between source offsets and highlighted occurrences in the preview.
 //
 // The sidebar search returns a line/column in the raw markdown, but the preview
-// is rendered HTML: frontmatter, code, link targets and similar constructs
-// disappear. These helpers decide which source spans become visible text so a
-// clicked result can target the matching <mark> element.
+// is rendered HTML: frontmatter, link targets and similar constructs disappear,
+// while code blocks are shown as text. These helpers decide which source spans
+// become visible text so a clicked result can target the matching <mark>.
 
 import { foldForSearch, isWholeWordMatch, lineStartOffset } from './search-fold.js';
 
@@ -23,18 +23,29 @@ export function sourceOffsetForLineColumn(content, line, column = 1) {
 /**
  * Source spans that never show up as text in the preview.
  *
- * Mirrors highlightInPreview's "skip code" rule plus the constructs the
- * renderer consumes instead of emitting as text: frontmatter, fenced and
- * inline code, HTML tags, link destinations, image alt text, the target half
- * of [[target|display]] and reference definitions.
+ * Mirrors highlightInPreview's rules plus the constructs the renderer consumes
+ * instead of emitting as text: frontmatter, link destinations, image alt text,
+ * the target half of [[target|display]], HTML tags and reference definitions.
+ *
+ * Code is visible in the preview, so its text is NOT hidden. Only the fence
+ * line of a regular code block (the info string is not rendered) and the whole
+ * body of fences the renderer replaces (mermaid/query) are hidden. Code spans
+ * also get their markdown-looking text skipped below, so a literal `<div>` or
+ * `[x](y)` inside a code block is not mistaken for markup.
  *
  * @param {string} content
  * @returns {Array<[number, number]>} sorted-ish, possibly overlapping spans
  */
 export function searchHiddenRegions(content) {
     const regions = [];
+    // Code spans are visible, but their contents are literal: markdown-looking
+    // text inside must not be interpreted as HTML/link/wikilink syntax.
+    const literalRegions = [];
     const add = (start, end) => {
         if (end > start) regions.push([start, end]);
+    };
+    const addLiteral = (start, end) => {
+        if (end > start) literalRegions.push([start, end]);
     };
 
     // Line starts, so every rule can work with whole lines.
@@ -46,8 +57,12 @@ export function searchHiddenRegions(content) {
 
     // Frontmatter, fenced code and reference definitions.
     let fence = null;
+    let previousBlank = true;
+    let previousIndented = false;
     for (let i = 0; i < lineStarts.length; i++) {
-        const line = content.slice(lineStarts[i], lineEnd(i));
+        const start = lineStarts[i];
+        const end = lineEnd(i);
+        const line = content.slice(start, end);
 
         // The renderer strips YAML frontmatter: opening '---' line,
         // then everything up to the next line that trims to '---'.
@@ -62,39 +77,100 @@ export function searchHiddenRegions(content) {
             if (close !== -1) {
                 add(0, lineEnd(close));
                 i = close;
+                previousBlank = true;
+                previousIndented = false;
                 continue;
             }
         }
 
         if (fence) {
             if (fence.closeRe.test(line)) {
-                add(fence.start, lineEnd(i));
+                if (fence.hidden) {
+                    add(fence.start, end);
+                } else {
+                    // The closing fence is not text either.
+                    add(start, end);
+                    addLiteral(fence.start, end);
+                }
                 fence = null;
             }
             continue;
         }
 
-        const open = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+        // Indented code blocks are rendered as visible text. Track them as
+        // literal so the inline scanner does not treat their contents as markup.
+        if ((previousBlank || previousIndented)
+            && /^(?: {4}|\t)/.test(line)
+            && line.trim() !== '') {
+            addLiteral(start, end);
+            previousBlank = false;
+            previousIndented = true;
+            continue;
+        }
+        previousIndented = false;
+
+        const open = line.match(/^\s{0,3}(`{3,}|~{3,})(.*)$/);
         if (open) {
+            const info = (open[2] || '').trim();
+            // These fences are replaced by rendered output (diagram/table),
+            // so none of their source text reaches the preview.
+            const hidden = /^(?:basalt-query|query|mermaid)(?:\s|$)/i.test(info);
             const ch = open[1][0];
             fence = {
-                start: lineStarts[i],
+                start,
+                hidden,
                 closeRe: new RegExp(
                     '^\\s{0,3}' + (ch === '`' ? '`' : '~') + '{' + open[1].length + ',}\\s*$'
                 ),
             };
+            // For regular fences only the opening line (info string included)
+            // disappears; the code body is rendered as text.
+            if (!hidden) add(start, end);
+            previousBlank = false;
             continue;
         }
 
-        if (/^\s{0,3}\[[^\]]+\]:/.test(line)) add(lineStarts[i], lineEnd(i));
-    }
-    if (fence) add(fence.start, content.length);
+        if (/^\s{0,3}\[[^\]]+\]:/.test(line)) {
+            add(start, end);
+            previousBlank = false;
+            continue;
+        }
 
-    // Inline constructs, scanned once over the whole document.
+        // GFM task markers become checkboxes, not text.
+        const task = line.match(/^(\s{0,3}[-*+]\s+)\[([ xX])\]/);
+        if (task) {
+            const markerStart = start + task[1].length;
+            add(markerStart, markerStart + 3);
+        }
+
+        previousBlank = line.trim() === '';
+    }
+    if (fence) {
+        if (fence.hidden) add(fence.start, content.length);
+        else addLiteral(fence.start, content.length);
+    }
+
+    // Inline constructs, scanned once over the whole document, skipping code
+    // spans (which the renderer fills with literal text).
+    literalRegions.sort((a, b) => a[0] - b[0]);
+    let literalIndex = 0;
+
     // Overlapping the line-based regions above is harmless.
     const TAG_RE = /<\/?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?\/?>/y;
     let i = 0;
     while (i < content.length) {
+        while (literalIndex < literalRegions.length
+            && literalRegions[literalIndex][1] <= i) {
+            literalIndex++;
+        }
+        if (literalIndex < literalRegions.length) {
+            const [literalStart, literalEnd] = literalRegions[literalIndex];
+            if (i >= literalStart && i < literalEnd) {
+                i = literalEnd;
+                continue;
+            }
+        }
+
         const ch = content[i];
 
         if (ch === '`') {
@@ -119,7 +195,8 @@ export function searchHiddenRegions(content) {
                 j++;
             }
             if (closed !== -1) {
-                add(i, closed);
+                // Inline code is visible text: skip it for syntax scanning but
+                // do not add it as a hidden region.
                 i = closed;
             } else {
                 i += runLen;
@@ -169,7 +246,10 @@ export function searchHiddenRegions(content) {
             }
             if (j < content.length) {
                 add(i, j + 1);
-                i = j + 1;
+                // Resume at the closing ']' so the generic `]()` rule below
+                // also hides the destination of ![alt](url). For ![[media]]
+                // the next character is another ']' and nothing else matches.
+                i = j;
             } else {
                 i++;
             }
@@ -209,6 +289,16 @@ export function searchHiddenRegions(content) {
             continue;
         }
 
+        if (ch === ']' && content[i + 1] === '[') {
+            // Reference-style link label: [text][ref] renders only "text".
+            const close = content.indexOf(']', i + 2);
+            if (close !== -1) {
+                add(i, close + 1);
+                i = close + 1;
+                continue;
+            }
+        }
+
         i++;
     }
 
@@ -224,16 +314,17 @@ export function spanOverlapsRegions(regions, start, end) {
 }
 
 /**
- * Index of the <mark> that corresponds to a source offset, or
- *   -1 when that occurrence never becomes preview text, and
- *   -2 when the source-side count disagrees with the rendered marks.
+ * Scan the source occurrences of the term and locate the clicked one relative
+ * to the preview marks.
+ *
+ * @returns {{ hidden: boolean, before: number, total: number }}
  */
-export function previewMarkIndexForSourceOffset(content, offset, foldedTerm, markCount, exactMatch = false) {
-    if (!content) return -2;
-
+function scanPreviewMatches(content, offset, foldedTerm, exactMatch) {
     const folded = foldForSearch(content);
     const regions = searchHiddenRegions(content);
-    if (spanOverlapsRegions(regions, offset, offset + 1)) return -1;
+    if (spanOverlapsRegions(regions, offset, offset + 1)) {
+        return { hidden: true, before: 0, total: 0 };
+    }
 
     let before = 0;
     let total = 0;
@@ -252,9 +343,41 @@ export function previewMarkIndexForSourceOffset(content, offset, foldedTerm, mar
         if (start < offset) before++;
     }
 
+    return { hidden: false, before, total };
+}
+
+/**
+ * Index of the <mark> that corresponds to a source offset, or
+ *   -1 when that occurrence never becomes preview text, and
+ *   -2 when the source-side count disagrees with the rendered marks.
+ */
+export function previewMarkIndexForSourceOffset(content, offset, foldedTerm, markCount, exactMatch = false) {
+    if (!content || !foldedTerm) return -2;
+
+    const scan = scanPreviewMatches(content, offset, foldedTerm, exactMatch);
+    if (scan.hidden) return -1;
+
     // Only trust the numbering when both sides agree on the amount of
-    // highlightable occurrences; a mismatch means one of the hidden
-    // region rules above is off for this note.
-    if (total !== markCount || before >= markCount) return -2;
-    return before;
+    // highlightable occurrences.
+    if (scan.total !== markCount || scan.before >= markCount) return -2;
+    return scan.before;
+}
+
+/**
+ * Best-effort version of previewMarkIndexForSourceOffset.
+ *
+ * One mismatch (a construct the hidden-region scanner does not know, a
+ * renderer-generated mark, math typeset after highlighting, …) used to make the
+ * whole note fall back to "nearest mark", which often activated the wrong
+ * occurrence — or none at all. When only the total disagrees, the rank of the
+ * clicked occurrence in source order is still the best guess, so return it
+ * instead of discarding the mapping.
+ */
+export function previewMarkIndexForSourceOffsetBestEffort(content, offset, foldedTerm, markCount, exactMatch = false) {
+    if (!content || !foldedTerm) return -2;
+
+    const scan = scanPreviewMatches(content, offset, foldedTerm, exactMatch);
+    if (scan.hidden) return -1;
+    if (scan.total === 0 || scan.before >= markCount) return -2;
+    return scan.before;
 }
