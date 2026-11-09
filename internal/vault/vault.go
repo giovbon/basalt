@@ -628,6 +628,15 @@ func (v *Vault) MoveNote(oldPath, newPath string) error {
 		return destinationExistsError(fmt.Sprintf("A note already exists at: %s", conflict))
 	}
 
+	var linkUpdates map[string]string
+	if strings.EqualFold(filepath.Ext(oldPath), ".md") {
+		var err error
+		linkUpdates, err = v.wikilinkUpdatesForMoveLocked(oldPath, newPath)
+		if err != nil {
+			return operationFailedError(fmt.Sprintf("Failed to update note links: %s", err.Error()))
+		}
+	}
+
 	if err := os.MkdirAll(filepath.Dir(newFull), 0755); err != nil {
 		return operationFailedError(fmt.Sprintf("Failed to move file: %s", err.Error()))
 	}
@@ -640,7 +649,122 @@ func (v *Vault) MoveNote(oldPath, newPath string) error {
 	// Paths changed everywhere under the folder: cheaper to walk once than to
 	// rewrite the snapshot.
 	v.scanCache.invalidate()
+
+	for sourcePath, content := range linkUpdates {
+		if NormalizedRelPath(sourcePath) == NormalizedRelPath(oldPath) {
+			sourcePath = newPath
+		}
+		if err := v.saveNoteLocked(sourcePath, content); err != nil {
+			return operationFailedError(fmt.Sprintf("Note moved, but failed to update links in %s: %s", sourcePath, err.Error()))
+		}
+	}
 	return nil
+}
+
+// wikilinkUpdatesForMoveLocked finds links that currently resolve to oldPath
+// and updates only their target text. The caller must hold v.mu.
+func (v *Vault) wikilinkUpdatesForMoveLocked(oldPath, newPath string) (map[string]string, error) {
+	var notePaths []string
+	err := filepath.WalkDir(v.notesDir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() && path != v.notesDir && strings.HasPrefix(entry.Name(), ".") {
+			return filepath.SkipDir
+		}
+		if entry.Type()&os.ModeSymlink != 0 || entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".md") {
+			return nil
+		}
+		rel, err := filepath.Rel(v.notesDir, path)
+		if err != nil {
+			return err
+		}
+		notePaths = append(notePaths, NormalizedRelPath(rel))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	resolver := NewLinkResolver(notePaths)
+	updates := make(map[string]string)
+	for _, sourcePath := range notePaths {
+		fullPath := v.FullPath(sourcePath)
+		data, err := os.ReadFile(fullPath)
+		if err != nil {
+			return nil, err
+		}
+		sourceFolder := filepath.ToSlash(filepath.Dir(sourcePath))
+		if sourceFolder == "." {
+			sourceFolder = ""
+		}
+		if NormalizedRelPath(sourcePath) == NormalizedRelPath(oldPath) {
+			sourceFolder = filepath.ToSlash(filepath.Dir(newPath))
+			if sourceFolder == "." {
+				sourceFolder = ""
+			}
+		}
+		updated := rewriteWikilinkTargets(string(data), sourceFolder, resolver, oldPath, newPath)
+		if updated != string(data) {
+			updates[sourcePath] = updated
+		}
+	}
+	return updates, nil
+}
+
+func rewriteWikilinkTargets(content, sourceFolder string, resolver *LinkResolver, oldPath, newPath string) string {
+	newFolder := filepath.ToSlash(filepath.Dir(newPath))
+	if newFolder == "." {
+		newFolder = ""
+	}
+
+	var result strings.Builder
+	for _, line := range strings.SplitAfter(content, "\n") {
+		lineEnd := ""
+		if strings.HasSuffix(line, "\n") {
+			line, lineEnd = strings.TrimSuffix(line, "\n"), "\n"
+		}
+		matches := wikilinkRe.FindAllStringSubmatchIndex(line, -1)
+		if len(matches) == 0 {
+			result.WriteString(line)
+			result.WriteString(lineEnd)
+			continue
+		}
+
+		var rewritten strings.Builder
+		last := 0
+		for _, match := range matches {
+			rewritten.WriteString(line[last:match[0]])
+			rawTarget := line[match[2]:match[3]]
+			trimmed := strings.TrimSpace(rawTarget)
+			replacement := rawTarget
+			if trimmed != "" && NormalizedRelPath(resolver.ResolveWikilink(trimmed, sourceFolder)) == NormalizedRelPath(oldPath) {
+				left := len(rawTarget) - len(strings.TrimLeftFunc(rawTarget, func(r rune) bool { return strings.TrimSpace(string(r)) == "" }))
+				right := len(rawTarget) - len(strings.TrimRightFunc(rawTarget, func(r rune) bool { return strings.TrimSpace(string(r)) == "" }))
+				core := trimmed
+				anchor := ""
+				if i := strings.Index(core, "#"); i >= 0 {
+					core, anchor = core[:i], core[i:]
+				}
+				targetPath := strings.TrimSuffix(newPath, filepath.Ext(newPath))
+				if !strings.Contains(core, "/") && sourceFolder == newFolder {
+					targetPath = strings.TrimSuffix(filepath.Base(newPath), filepath.Ext(newPath))
+				}
+				if strings.EqualFold(filepath.Ext(core), ".md") {
+					targetPath += filepath.Ext(newPath)
+				}
+				replacement = rawTarget[:left] + targetPath + anchor + rawTarget[len(rawTarget)-right:]
+			}
+			rewritten.WriteString(line[match[0]:match[2]])
+			rewritten.WriteString(replacement)
+			rewritten.WriteString(line[match[3]:match[1]])
+			last = match[1]
+		}
+		rewritten.WriteString(line[last:])
+		result.WriteString(rewritten.String())
+		result.WriteString(lineEnd)
+	}
+	return result.String()
 }
 
 func (v *Vault) CreateFolder(folderPath string) bool {

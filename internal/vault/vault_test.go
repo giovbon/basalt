@@ -34,6 +34,46 @@ func TestGetBacklinksIncludesHeadingAnchoredWikilinks(t *testing.T) {
 	}
 }
 
+func TestMoveNoteUpdatesWikilinksToRenamedNote(t *testing.T) {
+	dir := t.TempDir()
+	v := New(dir)
+	if err := v.SaveNote("folder/nota-1.md", "# Nota\n"); err != nil {
+		t.Fatal(err)
+	}
+	sameFolderLinks := "[[nota-1]] [[nota-1.md|alias]] [[nota-1#Head]] [[folder/nota-1.md]] [[other]] [markdown](nota-1.md)\n"
+	if err := v.SaveNote("folder/source.md", sameFolderLinks); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.SaveNote("outside.md", "Veja [[nota-1]] e [[nota-1#Head|alias]].\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := v.MoveNote("folder/nota-1.md", "folder/nota-2.md"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := v.GetNoteContent("folder/source.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "[[nota-2]] [[nota-2.md|alias]] [[nota-2#Head]] [[folder/nota-2.md]] [[other]] [markdown](nota-1.md)\n"
+	if got != want {
+		t.Errorf("same-folder links = %q, want %q", got, want)
+	}
+
+	got, err = v.GetNoteContent("outside.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "Veja [[folder/nota-2]] e [[folder/nota-2#Head|alias]].\n"; got != want {
+		t.Errorf("outside links = %q, want %q", got, want)
+	}
+
+	if got := v.GetBacklinks("folder/nota-2.md"); len(got) != 2 {
+		t.Errorf("backlinks after rename = %#v, want both source notes", got)
+	}
+}
+
 func TestResolveWikilinkIgnoresHeadingAnchor(t *testing.T) {
 	r := NewLinkResolver([]string{"target.md", "folder/note.md"})
 
