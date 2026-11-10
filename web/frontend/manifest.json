@@ -4,7 +4,6 @@
   "description": "Notas em Markdown auto-hospedadas, com links bidirecionais e grafo de conexões",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#120f1c",
   "theme_color": "#7c3aed",
   "orientation": "any",
   "scope": "/",
@@ -30,4 +29,3 @@
   ],
   "categories": ["productivity", "utilities"]
 }
-

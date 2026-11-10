@@ -1,9 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
   <defs>
-    <linearGradient id="fBg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#1f1b2e"/>
-      <stop offset="100%" stop-color="#120f1c"/>
-    </linearGradient>
     <linearGradient id="fBody" x1="50%" y1="0%" x2="50%" y2="100%">
       <stop offset="0%" stop-color="#a78bfa"/>
       <stop offset="55%" stop-color="#8b5cf6"/>
@@ -15,11 +11,8 @@
     </linearGradient>
   </defs>
 
-  <!-- Rounded-square tile -->
-  <rect x="0" y="0" width="100" height="100" rx="22" fill="url(#fBg)"/>
-
   <!-- Crystal, centered -->
-  <g transform="translate(50,50) scale(0.58) translate(-100,-100)">
+  <g transform="translate(50,50) scale(0.52) translate(-100,-100)">
     <path d="M100 14 L174 58 L174 142 L100 186 L26 142 L26 58 Z" fill="url(#fBody)"/>
     <path d="M100 14 L174 58 L100 96 L26 58 Z" fill="url(#fCap)"/>
     <path d="M100 96 L26 58 L26 142 L100 186 Z" fill="#000000" opacity="0.14"/>
