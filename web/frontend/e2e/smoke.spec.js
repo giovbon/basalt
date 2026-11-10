@@ -28,11 +28,16 @@ const WELCOME_NOTE = [
 ].join('\n') + '\n';
 
 async function restoreWelcomeNote(page) {
-  const saved = page.waitForResponse((response) =>
-    response.url().includes('/api/notes/Welcome.md')
-      && response.request().method() === 'POST'
-      && response.ok()
-  );
+  // Match the restored body, not just any POST: the previous test leaves a
+  // code-block autosave in flight, and resolving on that response would let
+  // the debounced restore POST be cancelled by the next test's navigation.
+  const saved = page.waitForResponse((response) => {
+    const request = response.request();
+    return response.url().includes('/api/notes/Welcome.md')
+      && request.method() === 'POST'
+      && (request.postData() || '').includes('end-to-end test vault')
+      && response.ok();
+  });
   await page.locator('#note-editor').fill(WELCOME_NOTE);
   await saved;
 }

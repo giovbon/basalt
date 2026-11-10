@@ -72,6 +72,25 @@ export function createState() {
         lastSaved: false,
         noteBaseHash: null,        // Fingerprint of the current note as last read or written on disk
         _saveControllerInstance: null, // lib/save-controller.js, created on first save
+
+        // Offline cache and outbox (lib/offline-store.js). The store and its
+        // opening promise live on the component so every slice can share one
+        // connection. offlineAvailable is false when the browser has no
+        // usable IndexedDB; the app then behaves exactly as before.
+        isOnline: typeof navigator === 'undefined' ? true : navigator.onLine !== false,
+        offlineAvailable: false,
+        offlineMode: false,        // sidebar data came from the cache
+        noteFromCache: false,      // current editor buffer came from the cache
+        pendingSaveCount: 0,
+        syncingOfflineSaves: false,
+        _offlineStore: null,
+        _offlineStorePromise: null,
+        _offlineListenersBound: false,
+        _outboxSyncInstance: null,
+        _syncPendingPromise: null,
+        _offlineSyncRetryTimer: null,
+        _offlineSaveNotified: false,
+        _notesSnapshotSeq: 0,
         linkCopied: false,
         zenMode: false,
         // Hides only the .sidebar-panel content (files / search / tags / outline / etc.) while

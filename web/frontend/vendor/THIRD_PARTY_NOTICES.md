@@ -21,4 +21,29 @@ licensed; these notices cover the vendored files only.
 DOMPurify is dual-licensed Apache-2.0 OR MPL-2.0 and vis-network is
 dual-licensed Apache-2.0 OR MIT; both are taken here under Apache-2.0.
 
+## Bundled npm dependencies
+
+These are compiled into `app.js` by esbuild (see `build-js.sh`) instead of
+being copied into this directory, and are listed here for licence tracking.
+
+| Library | Version | Licence |
+|---------|---------|---------|
+| idb | 8.0.4 | ISC |
+
+ISC License (idb)
+
+Copyright (c) 2016, Jake Archibald <jaffathecake@gmail.com>
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
 Regenerate this directory with `python scripts/vendor_assets.py`.

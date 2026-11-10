@@ -8,6 +8,12 @@ import { ErrorHandler, encodeVaultPath, FilenameValidator } from '../core/utils.
 import * as api from '../core/api.js';
 import { findDataviewQueries } from '../lib/dataview.js';
 import { createSaveController } from '../lib/save-controller.js';
+import { conflictCopyPath, foldersFromNotes, offlineStamp } from '../lib/paths.js';
+import { createOutboxSync } from '../lib/outbox-sync.js';
+
+// How long to wait before replaying an outbox that still has work after a pass
+// (text coalesced during the request, or a server that was briefly down).
+const OFFLINE_SYNC_RETRY_MS = 15000;
 
 export function createNotes() {
     return {
@@ -33,12 +39,87 @@ export function createNotes() {
                 this.buildNoteLookupMaps();
                 this.buildFolderTree();
                 await this.loadTags();
+                this.offlineMode = false;
+                // Fire-and-forget: the sidebar is already usable and the
+                // cache write must not delay it.
+                this._cacheNotesSnapshot(data);
             } catch (error) {
-                ErrorHandler.handle('load notes', error);
+                // Only transport failures and server errors fall back to the
+                // snapshot. A 401/403 must stay visible instead of showing a
+                // stale vault from a session that is no longer valid.
+                const canUseCache = !error || typeof error.status !== 'number' || error.status >= 500;
+                const restored = canUseCache ? await this._restoreNotesSnapshot() : false;
+                if (restored) {
+                    this.offlineMode = true;
+                } else {
+                    ErrorHandler.handle('load notes', error);
+                }
             } finally {
                 clearTimeout(this._notesLoadingOverlayTimer);
                 this.notesLoading = false;
                 this.notesLoadingShowOverlay = false;
+            }
+        },
+
+        // Persist the sidebar snapshot (summaries + folder list) for offline
+        // startup. Failures are silent: cache is best-effort.
+        _cacheNotesSnapshot(data) {
+            // Only the newest snapshot may replace the cache: two loadNotes()
+            // calls can overlap (initial load + a silent re-sync after a save)
+            // and the older response must not clobber the newer one.
+            const seq = this._notesSnapshotSeq + 1;
+            this._notesSnapshotSeq = seq;
+            Promise.resolve().then(async () => {
+                const store = await this._offlineReady();
+                if (!store || this._notesSnapshotSeq !== seq) return;
+                await store.replaceSummaries(data.notes || []);
+                await store.setMeta('folders', data.folders || []);
+                await store.setMeta('notesCachedAt', new Date().toISOString());
+            }).catch(() => {});
+        },
+
+        // Rebuild the sidebar from the cached snapshot. Returns false when
+        // nothing was ever cached, so the caller can surface the real error.
+        async _restoreNotesSnapshot() {
+            const store = await this._offlineReady();
+            if (!store) return false;
+            try {
+                const cachedAt = await store.getMeta('notesCachedAt', null);
+                if (cachedAt === null) return false;
+                const summaries = await store.listSummaries();
+                const folders = await store.getMeta('folders', null);
+                this.notes = summaries;
+                this.allFolders = Array.isArray(folders)
+                    ? folders
+                    : foldersFromNotes(summaries);
+                this.buildNoteLookupMaps();
+                this.buildFolderTree();
+                const tags = await store.getMeta('tags', null);
+                if (tags && typeof tags === 'object') this.allTags = tags;
+                return true;
+            } catch (_) {
+                return false;
+            }
+        },
+
+        // Cache the full GET /api/notes/{path} payload so the note can be
+        // opened offline with its outline, frontmatter and backlinks.
+        _cacheDocument(notePath, data) {
+            Promise.resolve().then(async () => {
+                const store = await this._offlineReady();
+                if (!store) return;
+                await store.putDocument({ ...data, path: notePath });
+            }).catch(() => {});
+        },
+
+        async _readCachedDocument(notePath) {
+            const store = await this._offlineReady();
+            if (!store) return null;
+            try {
+                const doc = await store.getDocument(notePath);
+                return doc && typeof doc.content === 'string' ? doc : null;
+            } catch (_) {
+                return null;
             }
         },
         
@@ -50,6 +131,7 @@ export function createNotes() {
             this.currentNote = '';
             this.noteContent = '';
             this.noteBaseHash = null;
+            this.noteFromCache = false;
             this.currentNoteName = '';
             this.outline = [];
             this.backlinks = [];
@@ -71,16 +153,19 @@ export function createNotes() {
         // of the occurrence to focus when the note was opened from a search
         // result (a line can hold more than one occurrence of the term).
         async loadNote(notePath, updateHistory = true, searchQuery = '', targetLine = null, targetColumn = null) {
-            try {
-                // Close mobile sidebar when a note is selected
-                this.mobileSidebarOpen = false;
+            // Close mobile sidebar when a note is selected
+            this.mobileSidebarOpen = false;
 
+            let data;
+            let fromCache = false;
+
+            try {
                 // include_backlinks=true: the backend only computes backlinks when
                 // this flag is present (they require a full vault scan, so they're
                 // opt-in per request). Without it the panel always shows empty.
                 // 404 means "removed elsewhere" and redirects home, so keep the status.
                 const response = await api.raw(`/api/notes/${encodeVaultPath(notePath)}?include_backlinks=true`);
-                
+
                 // Check if note exists
                 if (!response.ok) {
                     if (response.status === 404) {
@@ -89,11 +174,35 @@ export function createNotes() {
                         this._resetNoteState();
                         return;
                     }
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    const httpError = new Error(`HTTP error! status: ${response.status}`);
+                    httpError.status = response.status;
+                    throw httpError;
                 }
-                
-                const data = await response.json();
 
+                data = await response.json();
+                // Best-effort: a cache failure must never break opening a note.
+                this._cacheDocument(notePath, data);
+            } catch (error) {
+                // Only transport/HTTP-server failures reach here (a 404
+                // returned above). A 401/403 must stay visible instead of
+                // serving a cached copy from an invalid session.
+                const canUseCache = !error || typeof error.status !== 'number' || error.status >= 500;
+                data = canUseCache ? await this._readCachedDocument(notePath) : null;
+                if (!data) {
+                    if (!this.isOnline && this.notes.some((note) => note.path === notePath)) {
+                        this.toast(this.t('offline.note_not_available', {
+                            name: notePath.split('/').pop().replace('.md', ''),
+                        }), { type: 'warning' });
+                    } else {
+                        ErrorHandler.handle('load note', error);
+                    }
+                    return;
+                }
+                fromCache = true;
+            }
+
+            try {
+                this.noteFromCache = fromCache;
                 this.currentNote = notePath;
                 this._lastRenderedContent = ''; // Clear render cache for new note
                 this._lastRenderedNote = '';
@@ -452,7 +561,7 @@ export function createNotes() {
             return this._saveControllerInstance;
         },
 
-        async _sendNoteSave({ notePath, content, baseHash }) {
+        async _postNoteSave(notePath, content, baseHash) {
             // 409 is part of the protocol, so it is parsed rather than thrown.
             const response = await api.raw(`/api/notes/${encodeVaultPath(notePath)}`, {
                 method: 'POST',
@@ -460,6 +569,71 @@ export function createNotes() {
             });
             const body = (response.ok || response.status === 409) ? await response.json() : {};
             return { ok: response.ok, status: response.status, ...body };
+        },
+
+        async _sendNoteSave({ notePath, content, baseHash }) {
+            // A replay is writing this note: sending the buffer in parallel
+            // could race it and turn the user's own follow-up edit into a 409.
+            // Queueing keeps a single ordered writer per note.
+            if (this.syncingOfflineSaves) {
+                const queued = await this._queueOfflineSave({ notePath, content, baseHash });
+                if (queued) {
+                    return { ok: true, status: 0, queued: true, hash: baseHash || null };
+                }
+            }
+            try {
+                return await this._postNoteSave(notePath, content, baseHash);
+            } catch (error) {
+                // fetch only rejects for transport failures (offline, server
+                // unreachable); HTTP errors were turned into a response above.
+                const queued = await this._queueOfflineSave({ notePath, content, baseHash });
+                if (!queued) throw error;
+                return {
+                    ok: true,
+                    status: 0,
+                    queued: true,
+                    hash: baseHash || null,
+                };
+            }
+        },
+
+        // Persist the editor buffer in the outbox and in the document cache.
+        // Returns the queued operation, or null when the cache is unavailable
+        // (the caller then rethrows the original save error).
+        async _queueOfflineSave({ notePath, content, baseHash }) {
+            const store = await this._offlineReady();
+            if (!store) return null;
+            try {
+                const op = await store.queueSave({
+                    path: notePath,
+                    content,
+                    baseHash: baseHash || '',
+                });
+                const doc = await store.getDocument(notePath);
+                await store.putDocument({
+                    ...(doc || { path: notePath }),
+                    path: notePath,
+                    content,
+                    // The server still has the old version: keep baseHash as
+                    // the version the queued compare-and-swap is based on.
+                    hash: baseHash || null,
+                    // Parsed on the server; the cached copies describe the
+                    // previous version, so drop them instead of showing a TOC
+                    // for headings the pending text may have removed.
+                    outline: [],
+                    frontmatter: null,
+                    backlinks: [],
+                });
+                await this._refreshPendingSaveCount();
+                if (!this.isOnline && !this._offlineSaveNotified) {
+                    this._offlineSaveNotified = true;
+                    this.toast(this.t('offline.saved_locally'), { type: 'info' });
+                }
+                return op;
+            } catch (error) {
+                ErrorHandler.handle('queue offline save', error, false);
+                return null;
+            }
         },
 
         async _reloadAfterSaveConflict(notePath) {
@@ -472,12 +646,14 @@ export function createNotes() {
         },
 
         _handleSaveSuccess({ notePath, content }, result) {
+            const queued = result.queued === true;
+
             // A hover preview for this note would otherwise show the version
             // from before this save for up to its cache TTL.
             if (this._linkPreviewCache) this._linkPreviewCache.delete(notePath);
             if (this._wikilinkOutlineCache) this._wikilinkOutlineCache.delete(notePath);
 
-            if (notePath === this.currentNote) {
+            if (notePath === this.currentNote && !queued) {
                 this.noteBaseHash = result.hash || null;
                 // Refresh TOC and metadata panels from the server-parsed response.
                 this.outline = result.outline || [];
@@ -493,11 +669,13 @@ export function createNotes() {
             if (note) {
                 note.modified = new Date().toISOString();
                 note.size = new Blob([content]).size;
-                note.tags = result.tags || [];
+                if (Array.isArray(result.tags)) note.tags = result.tags;
+                this._cacheSummary(notePath);
             }
 
             // Reload tags to update sidebar counts (debounced to prevent spam).
-            this.loadTagsDebounced();
+            // A queued save has no server-parsed tags to refresh.
+            if (!queued) this.loadTagsDebounced();
             if (this.selectedTags.length > 0) {
                 this.buildFolderTree();
             }
@@ -506,6 +684,163 @@ export function createNotes() {
             setTimeout(() => {
                 this.lastSaved = false;
             }, CONFIG.SAVE_INDICATOR_DURATION);
+        },
+
+        async _cacheSummary(notePath) {
+            const store = await this._offlineReady();
+            const note = this.notes.find((n) => n.path === notePath);
+            if (!store || !note) return;
+            try {
+                await store.putSummary({ ...note });
+            } catch (_) {
+                // Cache is best-effort.
+            }
+        },
+
+        _getOutboxSync(store) {
+            if (!this._outboxSyncInstance) {
+                this._outboxSyncInstance = createOutboxSync({
+                    store,
+                    send: (op) => this._postNoteSave(op.path, op.content, op.baseHash),
+                    onSynced: (op, result) => this._handleOutboxSynced(store, op, result),
+                    onConflict: (op) => this._handleOutboxConflict(store, op),
+                    onFailed: (op, result) => {
+                        ErrorHandler.handle(
+                            'sync queued save',
+                            new Error(result?.detail || `HTTP ${result?.status || 0}`),
+                            false,
+                        );
+                    },
+                });
+            }
+            return this._outboxSyncInstance;
+        },
+
+        // Single-flight replay of the outbox. Called after startup, when the
+        // browser reports "online", and can be called again freely.
+        _syncPendingSaves() {
+            if (!this.isOnline) return null;
+            if (this._syncPendingPromise) return this._syncPendingPromise;
+
+            const run = (async () => {
+                const store = await this._offlineReady();
+                if (!store) return null;
+                const pending = await store.pendingCount().catch(() => 0);
+                if (pending === 0) {
+                    this.pendingSaveCount = 0;
+                    return null;
+                }
+
+                this.syncingOfflineSaves = true;
+                try {
+                    const summary = await this._getOutboxSync(store).sync();
+                    await this._refreshPendingSaveCount();
+                    // A drained outbox means the next offline stretch should
+                    // notify again, not stay silent because of this session.
+                    if (this.pendingSaveCount === 0) this._offlineSaveNotified = false;
+                    if (summary.synced > 0) {
+                        this.toast(this.t('offline.synced', { count: summary.synced }), {
+                            type: 'success',
+                        });
+                    }
+                    return summary;
+                } catch (error) {
+                    ErrorHandler.handle('sync offline saves', error, false);
+                    return null;
+                } finally {
+                    this.syncingOfflineSaves = false;
+                    // Text coalesced into an operation during the pass, or a
+                    // server that was briefly unhealthy, leaves work queued.
+                    // Retry in the background instead of waiting for the next
+                    // reload/reconnect event.
+                    this._scheduleOfflineSyncRetry();
+                }
+            })();
+
+            this._syncPendingPromise = run;
+            run.finally(() => {
+                this._syncPendingPromise = null;
+            }).catch(() => {});
+            return run;
+        },
+
+        _scheduleOfflineSyncRetry() {
+            if (this._offlineSyncRetryTimer) return;
+            if (!this.isOnline || this.pendingSaveCount === 0) return;
+            this._offlineSyncRetryTimer = setTimeout(() => {
+                this._offlineSyncRetryTimer = null;
+                this._syncPendingSaves();
+            }, OFFLINE_SYNC_RETRY_MS);
+        },
+
+        async _handleOutboxSynced(store, op, result) {
+            // Keep the cached document's base hash in sync, but only while its
+            // content is still the one the server just accepted. If the user
+            // typed during the request, queueSave() already holds newer text
+            // and a later pass will update the hash.
+            try {
+                const doc = await store.getDocument(op.path);
+                if (doc && doc.content === op.content) {
+                    await store.putDocument({ ...doc, hash: result.hash || null });
+                }
+            } catch (_) {
+                // Cache is best-effort.
+            }
+
+            // If newer text was coalesced into the operation while it was in
+            // flight, it was typed on top of what the server just accepted, so
+            // rebase it. Without this the next replay would see a false 409.
+            try {
+                await store.rebasePath(op.path, result.hash || '');
+            } catch (_) {
+                // Cache is best-effort.
+            }
+
+            if (op.path === this.currentNote) {
+                // The server version is now the base for any later save of this
+                // note, even if the buffer already contains newer keystrokes.
+                this.noteBaseHash = result.hash || null;
+                if (op.content === this.noteContent) {
+                    this._handleSaveSuccess({ notePath: op.path, content: op.content }, result);
+                }
+            } else {
+                const note = this.notes.find((n) => n.path === op.path);
+                if (note) {
+                    note.modified = new Date().toISOString();
+                    note.size = new Blob([op.content]).size;
+                    if (Array.isArray(result.tags)) note.tags = result.tags;
+                    this._cacheSummary(op.path);
+                }
+            }
+        },
+
+        // The queued text no longer matches the server. Preserve it as a
+        // sibling note instead of overwriting or discarding it.
+        async _handleOutboxConflict(store, op) {
+            const stamp = `${offlineStamp()}-${String(op.opId).slice(0, 6)}`;
+            const copyPath = conflictCopyPath(op.path, stamp);
+            let result;
+            try {
+                result = await this._postNoteSave(copyPath, op.content, '');
+            } catch (_) {
+                // Offline again: leave the operation queued for the next pass.
+                return;
+            }
+
+            if (result.ok) {
+                await store.ackOp(op.opId, { updatedAt: op.updatedAt });
+                this.toast(this.t('offline.conflict_copy', { path: copyPath }), {
+                    type: 'warning',
+                    durationMs: 12000,
+                });
+                await this.loadNotes({ silent: true });
+                return;
+            }
+
+            this.toast(this.t('offline.conflict_pending', { path: op.path }), {
+                type: 'warning',
+                durationMs: 12000,
+            });
         },
 
         // Ask what to do when the server refused a save because the file changed on disk.

@@ -386,5 +386,19 @@
   "demo": {
     "title": "MODO DEMO",
     "warning": "O conteúdo é reiniciado diariamente. As alterações podem ser sobrescritas por outros usuários."
+  },
+  "offline": {
+    "status": "Offline",
+    "status_hint": "Sem conexão. As alterações ficam salvas neste dispositivo.",
+    "saved_locally": "Sem conexão. Alterações salvas neste dispositivo e serão sincronizadas quando a conexão voltar.",
+    "pending": "{{count}} pendente(s)",
+    "pending_hint": "Alterações salvas neste dispositivo aguardando sincronização.",
+    "syncing": "Sincronizando...",
+    "synced": "{{count}} alteração(ões) sincronizada(s).",
+    "cached": "Versão offline",
+    "cached_hint": "Conteúdo carregado do cache local; pode estar desatualizado.",
+    "note_not_available": "{{name}} não está disponível offline.",
+    "conflict_copy": "Conflito em uma alteração offline. Sua versão foi preservada em {{path}}.",
+    "conflict_pending": "Conflito ao sincronizar {{path}}. Sua versão continua salva neste dispositivo."
   }
 }

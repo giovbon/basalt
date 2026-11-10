@@ -4,10 +4,16 @@
 // this factory's object with the other feature slices (see compose()).
 
 import * as api from '../core/api.js';
+import { createOfflineStore } from '../lib/offline-store.js';
 import { setAppRoot } from './root.js';
 import { createLocalSettings } from './local-settings.js';
 import { createLocalization } from './localization.js';
 import { createThemeSettings } from './theme-settings.js';
+
+// IndexedDB open can be blocked (another tab holding an older schema). Cap the
+// wait so startup and offline fallbacks never hang on it: the store keeps
+// opening in the background and later calls can still use it.
+const OFFLINE_OPEN_TIMEOUT_MS = 5000;
 
 export function createBootstrap() {
     return {
@@ -49,8 +55,16 @@ export function createBootstrap() {
             // sortMode, hideUnderscoreFolders and viewMode do not flash the
             // defaults and then switch once the API data arrives.
             this.loadLocalSettings();
+            // Start IndexedDB in the background: startup must not wait for it,
+            // and the online paths only write to it after the response arrives.
+            this._initOffline();
             await this.loadNotes();
-            
+
+            // Reconcile queued edits before opening the note from the URL:
+            // otherwise the editor would show the pre-offline version and the
+            // replay would overwrite it on the server moments later.
+            if (this.isOnline) await this._syncPendingSaves();
+
             // Parse URL and load specific note if provided
             this.loadItemFromURL();
             
@@ -351,6 +365,76 @@ export function createBootstrap() {
             }
         },
         
+        // Create the shared IndexedDB store (once) and subscribe to the
+        // browser's connectivity events. Opening is asynchronous; startup only
+        // waits for it through _offlineReady(), which is time-boxed.
+        _initOffline() {
+            if (!this._offlineStore) {
+                this._offlineStore = createOfflineStore();
+            }
+            if (!this._offlineStorePromise) {
+                this._offlineStorePromise = this._offlineStore.open().then((ok) => {
+                    this.offlineAvailable = ok;
+                    return ok;
+                });
+                this._offlineStorePromise.then((ok) => {
+                    if (ok) this._refreshPendingSaveCount();
+                });
+            }
+            if (!this._offlineListenersBound && typeof window !== 'undefined') {
+                this._offlineListenersBound = true;
+                window.addEventListener('online', () => {
+                    this.isOnline = true;
+                    this.offlineMode = false;
+                    this._syncPendingSaves();
+                });
+                window.addEventListener('offline', () => {
+                    this.isOnline = false;
+                    // Nothing can be replayed until the connection returns;
+                    // drop the pending retry so it does not wake up in vain.
+                    if (this._offlineSyncRetryTimer) {
+                        clearTimeout(this._offlineSyncRetryTimer);
+                        this._offlineSyncRetryTimer = null;
+                    }
+                });
+            }
+            return this._offlineStorePromise;
+        },
+
+        // Resolves to the store when IndexedDB is usable, or null. Callers must
+        // treat null as "online only" and keep working. Bounded by a timeout so
+        // a blocked open cannot stall startup or the offline fallback.
+        async _offlineReady() {
+            if (!this._offlineStorePromise) this._initOffline();
+            let timer;
+            const timeout = new Promise((resolve) => {
+                timer = setTimeout(() => resolve(false), OFFLINE_OPEN_TIMEOUT_MS);
+            });
+            try {
+                const ok = await Promise.race([this._offlineStorePromise, timeout]);
+                return ok ? this._offlineStore : null;
+            } finally {
+                clearTimeout(timer);
+            }
+        },
+
+        async _refreshPendingSaveCount() {
+            const store = await this._offlineReady();
+            if (!store) {
+                this.pendingSaveCount = 0;
+                return;
+            }
+            try {
+                this.pendingSaveCount = await store.pendingCount();
+                if (this.pendingSaveCount === 0 && this._offlineSyncRetryTimer) {
+                    clearTimeout(this._offlineSyncRetryTimer);
+                    this._offlineSyncRetryTimer = null;
+                }
+            } catch (_) {
+                // A transient IndexedDB error must not surface as a save error.
+            }
+        },
+
         // Load app configuration
         async loadConfig() {
             try {

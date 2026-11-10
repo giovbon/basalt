@@ -74,8 +74,34 @@ export function createSidebar() {
             try {
                 const data = await api.getJSON('/api/tags');
                 this.allTags = data.tags || {};
+                this._cacheTags(this.allTags);
             } catch (error) {
-                ErrorHandler.handle('load tags', error, false); // Optional: no toast
+                // Offline: the counts come from the last snapshot; without one,
+                // keep the previous in-memory value instead of clearing it.
+                const cached = await this._readCachedTags();
+                if (cached) {
+                    this.allTags = cached;
+                } else {
+                    ErrorHandler.handle('load tags', error, false); // Optional: no toast
+                }
+            }
+        },
+
+        _cacheTags(tags) {
+            Promise.resolve().then(async () => {
+                const store = await this._offlineReady();
+                if (store) await store.setMeta('tags', tags);
+            }).catch(() => {});
+        },
+
+        async _readCachedTags() {
+            const store = await this._offlineReady();
+            if (!store) return null;
+            try {
+                const tags = await store.getMeta('tags', null);
+                return tags && typeof tags === 'object' ? tags : null;
+            } catch (_) {
+                return null;
             }
         },
         

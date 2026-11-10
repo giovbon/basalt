@@ -343,3 +343,91 @@ ntfy configurado e têm limite de 100 MB. Em Docker, a pasta e o estado ficam
 persistentes no volume de `NOTES_DIR`.
 Variáveis `NTFY_*` definidas no ambiente prevalecem sobre o arquivo na próxima
 inicialização. `NTFY_TAGS` também aceita uma lista separada por vírgulas.
+
+---
+
+## Offline-First (PWA)
+
+O Basalt funciona **offline** como um Progressive Web App (PWA): você abre o app, edita notas e as alterações são sincronizadas automaticamente quando a conexão volta.
+
+### O que funciona offline
+
+- ✅ Abrir e ler notas já visitadas (cache no navegador)
+- ✅ Editar notas **existentes** (apenas texto Markdown)
+- ✅ Salvamento automático (debounce) enquanto offline — as edições ficam na fila local
+- ✅ Sincronização automática ao reconectar (compare-and-swap via hash de conteúdo)
+- ✅ Detecção de conflito: se o servidor mudou a nota enquanto você editava offline, sua versão vira uma nota-irmã `arquivo.offline-conflict-<timestamp>.md` — nada é perdido
+- ✅ Indicadores visuais: status offline, “salvando localmente”, “pendente de sincronizar”, “nota do cache”
+
+### O que **não** funciona offline (limitações atuais)
+
+- ❌ Criar, renomear ou excluir notas/pastas
+- ❌ Upload de mídia (imagens, áudio, vídeo, PDFs)
+- ❌ Cache de mídia anexada
+- ❌ Logout não limpa o cache local (use modo privado/incógnito em computadores públicos)
+
+### Tecnologias usadas
+
+| Camada | Tecnologia | Papel |
+|--------|------------|-------|
+| Armazenamento local | **IndexedDB** (via [`idb`](https://www.npmjs.com/package/idb) 8.x) | 4 object stores: `notes` (sumários), `documents` (conteúdo completo + hash), `outbox` (operações em fila), `meta` (chave/valor) |
+| Fila de sincronização | **Outbox FIFO** (auto-increment `seq`) | `queueSave()` coalesce edições da mesma nota (mantém primeiro `opId` e `baseHash`); replay single-flight |
+| Sincronização | **Compare-and-swap** (hash SHA-256 do conteúdo) | Go: `SaveNoteIfHash`; frontend: `baseHash` no payload; 409 → conflito → cópia-irmã |
+| Service Worker | **Workbox-style** (precache + runtime cache) | Precacha shell (`index.html`, `app.js`, vendor, temas, locales); navegação cai para `/index.html`; assets estáticos em runtime cache |
+| PWA Manifest | `manifest.webmanifest` | Instalável, ícones, `display: standalone`, `scope: /` |
+| Testes | Playwright (E2E serial), `fake-indexeddb` (unitários) | 20 testes E2E + 192 testes unitários |
+
+### Arquitetura do offline (resumo)
+
+1. **Startup** (`bootstrap.js`):
+   - Abre IndexedDB (`_offlineReady()` com timeout 5 s)
+   - `replaceSummaries()` espelha `/api/notes` (dropa notas deletadas no servidor)
+   - Aguarda `_syncPendingSaves()` **antes** de abrir a nota da URL — assim edições enfileiradas chegam antes do load
+
+2. **Cache de documento** (`notes.js`):
+   - Ao abrir nota online: `putDocument({ path, content, hash, outline, frontmatter, backlinks, tags })`
+   - Offline: `loadNote()` lê do `documents` store; indicador “cached” aparece no editor
+
+3. **Salvamento offline** (`notes.js` → `_sendNoteSave`):
+   - Se `syncingOfflineSaves` ou fetch falha (rede/5xx): `queueSave({ path, content, baseHash })` + atualiza `documents` com hash antigo
+   - `baseHash` = versão do servidor onde a edição começou → CAS no replay
+   - `ackOp(opId, {updatedAt})` recusa exclusão se houver edição mais nova coalescida
+
+4. **Replay** (`outbox-sync.js`):
+   - Single-flight, ordenado por `seq`
+   - POST `/api/notes/{path}` com `base_hash`
+   - 200/201 → `ackOp` + `rebasePath(path, newHash)` (evita falso 409 na próxima passada)
+   - 409 → `onConflict` → cria cópia-irmã `*.offline-conflict-<stamp>.md` com `baseHash=""`
+   - 4xx (exceto 409) → loga erro, continua; 5xx/transport → **para a passada**, agenda retry
+
+5. **Retry automático**:
+   - A cada 15 s (`OFFLINE_SYNC_RETRY_MS`) enquanto houver fila e estiver online
+   - Notificação “X notas sincronizadas” ao drenar a fila
+
+6. **Indicadores no editor** (`partials/main/editor.html`):
+   - `offline.status` (amarelo) — sem conexão
+   - `offline.syncing` — replay em andamento
+   - `offline.pending` (contagem) — fila não vazia, aguardando retry
+   - `offline.cached` — nota veio do IndexedDB
+
+### Como testar manualmente
+
+```bash
+# 1. Suba o servidor
+./run.sh
+
+# 2. Abra http://localhost:8000, espere o SW registrar (console: "SW registered")
+# 3. Abra uma nota → edite → feche aba
+# 4. Desligue a rede (ou DevTools → Network → Offline)
+# 5. Recarregue → a nota abre do cache (badge "cached")
+# 6. Edite offline → indicador "salvo localmente" + contador "pendente"
+# 7. Religue a rede → toast "X notas sincronizadas"
+# 8. Se houver conflito no servidor → aparece `arquivo.offline-conflict-*.md` na sidebar
+```
+
+### Em computadores públicos
+
+O cache fica no **navegador do dispositivo** (IndexedDB por origem). Em um PC público:
+- Use **modo privado/incógnito** — o cache morre ao fechar a janela
+- Ou limpe dados do site (`DevTools → Application → Storage → Clear site data`) antes de sair
+- Não há sincronização automática entre dispositivos; para isso use o servidor (mesmo vault, mesmo `NOTES_DIR`) ou exporte/importe manualmente

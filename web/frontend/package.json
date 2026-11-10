@@ -12,8 +12,12 @@
     "test:performance": "node bench/editor-performance.mjs",
     "test:e2e": "playwright test"
   },
+  "dependencies": {
+    "idb": "8.0.4"
+  },
   "devDependencies": {
     "@playwright/test": "1.63.0",
+    "fake-indexeddb": "6.2.4",
     "markmap-lib": "0.18.13",
     "markmap-view": "0.18.13"
   }
