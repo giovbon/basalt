@@ -12,7 +12,9 @@ import { createSearch } from './app/search.js';
 import { createTodos } from './app/todos.js';
 import { createBootstrap } from './app/bootstrap.js';
 import { createNotes } from './app/notes.js';
+import { createFolders } from './app/folders.js';
 import { createPreview } from './app/preview.js';
+import { createPreviewTasks } from './app/preview-tasks.js';
 import { createGraph } from './app/graph.js';
 import { createEditor } from './app/editor.js';
 import { createLinkPreview } from './app/link-preview.js';
@@ -44,7 +46,9 @@ function noteApp() {
         createTodos(),
         createBootstrap(),
         createNotes(),
+        createFolders(),
         createPreview(),
+        createPreviewTasks(),
         createGraph(),
         createEditor(),
         createLinkPreview(),

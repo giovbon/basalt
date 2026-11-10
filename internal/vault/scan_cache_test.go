@@ -1,6 +1,8 @@
 package vault
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,6 +21,55 @@ func notePaths(notes []NoteRecord) map[string]struct{} {
 func hasPath(set map[string]struct{}, path string) bool {
 	_, ok := set[path]
 	return ok
+}
+
+func TestScanNotesDoesNotCachePartialWalkOnError(t *testing.T) {
+	dir := t.TempDir()
+	v := New(dir)
+	if err := v.SaveNote("complete.md", "complete\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := v.ScanNotes(false); err != nil {
+		t.Fatal(err)
+	}
+	v.scanCache.mu.Lock()
+	cachedSnapshot := v.scanCache.snap
+	v.scanCache.mu.Unlock()
+
+	walkErr := errors.New("injected directory read failure")
+	originalWalkDir := v.walkDir
+	v.walkDir = func(root string, walkFn fs.WalkDirFunc) error {
+		return filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+			if err == nil && path == filepath.Join(root, "blocked") {
+				return walkFn(path, nil, walkErr)
+			}
+			return walkFn(path, entry, err)
+		})
+	}
+	if err := os.Mkdir(filepath.Join(dir, "blocked"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	v.scanCache.invalidate()
+	if _, _, err := v.ScanNotes(false); !errors.Is(err, walkErr) {
+		t.Fatalf("ScanNotes error = %v, want injected walk error", err)
+	}
+	v.scanCache.mu.Lock()
+	snapshotAfterFailure := v.scanCache.snap
+	cacheStillStale := v.scanCache.stale
+	v.scanCache.mu.Unlock()
+	if snapshotAfterFailure != cachedSnapshot || !cacheStillStale {
+		t.Fatal("failed walk replaced or validated the cached snapshot")
+	}
+
+	v.walkDir = originalWalkDir
+	notes, _, err := v.ScanNotes(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasPath(notePaths(notes), "complete.md") {
+		t.Errorf("successful retry omitted complete.md: %v", notePaths(notes))
+	}
 }
 
 // TestScanNotesServesSnapshotUntilWriteOrTTL pins the two refresh paths of the

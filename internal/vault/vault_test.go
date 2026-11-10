@@ -74,6 +74,52 @@ func TestMoveNoteUpdatesWikilinksToRenamedNote(t *testing.T) {
 	}
 }
 
+func TestMoveNoteRollsBackWhenLinkWriteFails(t *testing.T) {
+	dir := t.TempDir()
+	v := New(dir)
+	if err := v.SaveNote("target.md", "target\n"); err != nil {
+		t.Fatal(err)
+	}
+	originalLinks := "See [[target]].\n"
+	for _, path := range []string{"a-source.md", "b-source.md"} {
+		if err := v.SaveNote(path, originalLinks); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writes := 0
+	v.moveLinkWrite = func(path, content string) error {
+		writes++
+		if writes == 2 {
+			return errors.New("injected write failure")
+		}
+		return v.saveNoteLocked(path, content)
+	}
+
+	err := v.MoveNote("target.md", "renamed.md")
+	if err == nil {
+		t.Fatal("MoveNote succeeded despite a link write failure")
+	}
+	if !strings.Contains(err.Error(), "Move was rolled back") {
+		t.Fatalf("MoveNote error = %q, want explicit rollback result", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "target.md")); err != nil {
+		t.Errorf("original note was not restored: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "renamed.md")); !os.IsNotExist(err) {
+		t.Errorf("destination still exists after rollback, stat error = %v", err)
+	}
+	for _, path := range []string{"a-source.md", "b-source.md"} {
+		got, err := os.ReadFile(filepath.Join(dir, path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != originalLinks {
+			t.Errorf("%s = %q after rollback, want %q", path, got, originalLinks)
+		}
+	}
+}
+
 func TestResolveWikilinkIgnoresHeadingAnchor(t *testing.T) {
 	r := NewLinkResolver([]string{"target.md", "folder/note.md"})
 
@@ -375,6 +421,29 @@ func TestSaveNoteIfHashCompareAndSwap(t *testing.T) {
 	}
 	if !res.Saved || !res.Created {
 		t.Errorf("Saved = %v, Created = %v, want true true", res.Saved, res.Created)
+	}
+}
+
+func TestSaveNoteIfHashDoesNotRecreateDeletedNote(t *testing.T) {
+	dir := t.TempDir()
+	v := New(dir)
+	original := "original content\n"
+	if err := v.SaveNote("note.md", original); err != nil {
+		t.Fatal(err)
+	}
+	if !v.DeleteNote("note.md") {
+		t.Fatal("DeleteNote(note.md) failed")
+	}
+
+	result, err := v.SaveNoteIfHash("note.md", "unsaved edits\n", ContentHash(original))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Saved || !result.Deleted {
+		t.Errorf("result = %+v, want Deleted true and Saved false", result)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "note.md")); !os.IsNotExist(err) {
+		t.Errorf("deleted note was recreated, stat error = %v", err)
 	}
 }
 

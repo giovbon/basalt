@@ -1,4 +1,4 @@
-// Markdown preview rendering, math, mermaid and code blocks.
+// Markdown preview rendering and rich-block post-processing.
 //
 // Split out of the former monolith src/main.js; noteApp() in main.js composes
 // this factory's object with the other feature slices (see compose()).
@@ -13,7 +13,6 @@ import {
     formatDataviewError,
 } from '../lib/dataview.js';
 import { isMarkmapNote } from '../lib/markmap-note.js';
-import { scanTaskLines, toggleTaskAt, setAllTasks } from '../lib/tasks.js';
 import { typeIconSvg } from '../lib/file-icons.js';
 
 const MARKMAP_RENDER_DEBOUNCE_MS = 500;
@@ -149,121 +148,6 @@ export function createPreview() {
             html += '\n ';
             
             return html;
-        },
-        
-        // Single click entry point for the preview pane.
-        handlePreviewClick(event) {
-            this.activateSearchMatch(event.target);
-            if (this.toggleTaskFromPreview(event)) return;
-            this.handleInternalLink(event);
-        },
-
-        /**
-         * The checkbox a click should toggle: the box itself, or the one belonging to
-         * the task item whose text was clicked. Returns null when the click was meant
-         * for something else — following a link, playing a video, selecting text.
-         */
-        _taskBoxForClick(event) {
-            const target = event.target;
-            if (!target || !target.closest) return null;
-
-            if (target.tagName === 'INPUT' && target.type === 'checkbox') return target;
-
-            // Anything with its own click behaviour, plus code blocks, which people
-            // click to read and copy rather than to tick something off.
-            if (target.closest('a, img, video, audio, iframe, pre, button, label, summary')) return null;
-
-            // detail > 1 is the second half of a double-click, which is someone
-            // selecting a word rather than aiming at the item.
-            if (event.detail !== 1) return null;
-            const selection = window.getSelection();
-            if (selection && !selection.isCollapsed) return null;
-
-            const item = target.closest('li');
-            if (!item) return null;
-
-            // First box in document order belongs to this item unless it sits in a
-            // nested one, which is the case when a plain bullet has task children.
-            const box = item.querySelector('input[type="checkbox"][data-task-index]');
-            return box && box.closest('li') === item ? box : null;
-        },
-
-        /**
-         * Every task in the note to the opposite of the clicked one, so ticking one box
-         * off a mixed list ticks the rest. A single assignment, so one Ctrl+Z undoes it.
-         *
-         * The change touches many lines at once, which the single-shot replace
-         * endpoint cannot express, so it goes through the regular (debounced,
-         * conflict-checked) whole-note save.
-         */
-        _toggleAllTasksFromPreview(box) {
-            const index = parseInt(box.getAttribute('data-task-index'), 10);
-            if (!Number.isInteger(index)) return false;
-
-            const result = setAllTasks(this.noteContent, index);
-            if (!result.found) return false;
-            if (!result.changed) return true;
-
-            this.noteContent = result.text;
-            this.autoSave();
-            this.toast(
-                this.t(result.nextState === 'x' ? 'editor.tasks_all_checked' : 'editor.tasks_all_unchecked',
-                    { changed: result.changeCount, total: result.total })
-            );
-            return true;
-        },
-
-        /**
-         * Persist a single toggled task line through /api/notes/replace: the
-         * endpoint patches exactly that line against the on-disk content, so a
-         * click never overwrites edits made elsewhere (another editor, a sync
-         * tool) the way a whole-note save would. Falls back to the regular
-         * save when the line is not unique in the note (the endpoint answers
-         * 409) or the request fails.
-         */
-        async _persistTaskToggle(oldLine, newLine) {
-            try {
-                const response = await api.raw('/api/notes/replace', {
-                    method: 'POST',
-                    json: { path: this.currentNote, old_str: oldLine, new_str: newLine }
-                });
-                if (!response.ok) {
-                    this.autoSave();
-                    return;
-                }
-                const result = await response.json();
-                // The patched line is now the disk state the next whole-note
-                // save is compared against.
-                this.noteBaseHash = result.hash || null;
-                this.lastSaved = true;
-            } catch (error) {
-                console.error('Failed to replace task line:', error);
-                this.autoSave();
-            }
-        },
-
-        /** Tick/untick the clicked task item in the source. True when it was a task. */
-        toggleTaskFromPreview(event) {
-            const box = this._taskBoxForClick(event);
-            if (!box) return false;
-
-            // Ctrl (Cmd on a Mac) applies the change to every task in the note. Ctrl
-            // leaves the text selection alone, unlike Shift, so the guards in
-            // _taskBoxForClick hold for the box and the item text alike.
-            if (event.ctrlKey || event.metaKey) return this._toggleAllTasksFromPreview(box);
-
-            const index = parseInt(box.getAttribute('data-task-index'), 10);
-            if (!Number.isInteger(index)) return false;
-
-            // Rescanned per click: the note can change between render and click.
-            const result = toggleTaskAt(this.noteContent, index);
-            if (!result.changed) return false;
-
-            this.noteContent = result.text;
-            if (!this.isUndoRedo) this.pushToHistory();
-            this.lastSaved = false;
-            this._persistTaskToggle(result.oldLine, result.newLine);
-            return true;
         },
         
         // Trigger MathJax typesetting after DOM update.
@@ -838,17 +722,6 @@ export function createPreview() {
             
             // Add button to pre element
             preElement.appendChild(button);
-        },
-        
-        /**
-         * Source line of every task item, in document order. Frontmatter and fenced
-         * code are skipped since neither renders a checkbox. Callers pair these with the
-         * rendered boxes only when the counts match, which is safe as long as this can
-         * over-count but never under-count: a miss here could cancel out a spare and
-         * pass that check with everything shifted by one.
-         */
-        _scanTaskLines(source) {
-            return scanTaskLines(source);
         },
         
         // Export current note as HTML via backend API

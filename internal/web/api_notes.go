@@ -130,8 +130,9 @@ type SaveNoteResponse struct {
 }
 
 type ConflictHashResponse struct {
-	Detail string `json:"detail"`
-	Hash   string `json:"hash"`
+	Detail  string `json:"detail"`
+	Hash    string `json:"hash,omitempty"`
+	Deleted bool   `json:"deleted,omitempty"`
 }
 
 func (h *NotesHandler) SaveNote(w http.ResponseWriter, r *http.Request) {
@@ -176,6 +177,13 @@ func (h *NotesHandler) SaveNote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !result.Saved {
+		if result.Deleted {
+			RespondJSON(w, http.StatusConflict, ConflictHashResponse{
+				Detail:  "Note was deleted from disk since it was loaded",
+				Deleted: true,
+			})
+			return
+		}
 		RespondJSON(w, http.StatusConflict, ConflictHashResponse{
 			Detail: "Note changed on disk since it was loaded",
 			Hash:   result.CurrentHash,

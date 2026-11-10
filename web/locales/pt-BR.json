@@ -125,6 +125,9 @@
     "save_conflict_message": "\"{{name}}\" foi alterada no disco desde que você a abriu: outra aba, uma ferramenta de sincronização ou um agente de IA escreveu nela.\n\nRecarregar mostra a versão no disco; suas alterações não salvas serão descartadas.\nSobrescrever salva a sua versão no lugar da deles.",
     "save_conflict_overwrite": "Sobrescrever",
     "save_conflict_reload": "Recarregar",
+    "save_deleted_title": "Nota excluída",
+    "save_deleted_message": "\"{{name}}\" foi excluída do disco desde que você a abriu.\n\nRecarregar descarta as alterações não salvas. Recriar restaura a nota com a sua versão.",
+    "save_deleted_recreate": "Recriar nota",
     "save_conflict_unsaved": "\"{{name}}\": suas últimas alterações não foram salvas, a nota foi alterada em outro lugar."
   },
   "folders": {

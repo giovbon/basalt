@@ -75,7 +75,9 @@ export function createSaveController({
                     onBusyChange?.(false);
                     let overwrite = false;
                     try {
-                        overwrite = Boolean(await askConflict?.(payload.notePath));
+                        overwrite = Boolean(await askConflict?.(payload.notePath, {
+                            deleted: Boolean(result.deleted),
+                        }));
                     } finally {
                         conflictOpen = false;
                     }

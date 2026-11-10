@@ -81,6 +81,32 @@ test('accepting the conflict overwrite retries once with the disk hash as base',
     assert.equal(saved.length, 1);
 });
 
+test('a deleted note is a distinct conflict and is recreated only after confirmation', async () => {
+    const sends = [];
+    const conflicts = [];
+    const controller = createSaveController(baseDeps({
+        send: async (payload) => {
+            sends.push(payload);
+            return sends.length === 1
+                ? { ok: false, status: 409, deleted: true }
+                : { ok: true, status: 200, hash: 'recreated-hash' };
+        },
+        askConflict: async (notePath, details) => {
+            conflicts.push({ notePath, details });
+            return true;
+        },
+    }));
+
+    await controller.request();
+
+    assert.deepEqual(conflicts, [{
+        notePath: 'notes/a.md',
+        details: { deleted: true },
+    }]);
+    assert.equal(sends.length, 2);
+    assert.equal(sends[1].baseHash, null, 'confirmed recreation should use an empty base hash');
+});
+
 test('declining the conflict reloads the disk version and drops the queued save', async () => {
     const sends = [];
     const reloads = [];

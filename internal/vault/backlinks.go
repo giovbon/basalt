@@ -28,6 +28,72 @@ type backlinkIndex struct {
 	name  map[string]string // source path -> note name
 }
 
+// GetBacklinks returns every note linking to targetNotePath. The scan snapshot
+// carries a reverse link index, so the request is a handful of map lookups
+// (proportional to the number of backlinks) instead of a pass over the vault.
+func (v *Vault) GetBacklinks(targetNotePath string) []BacklinkItem {
+	snap, err := v.scanNotesSnapshot()
+	if err != nil {
+		return []BacklinkItem{}
+	}
+	return snap.backlinks(v.idx.links).find(targetNotePath)
+}
+
+func linkContext(line string, matchStart, matchEnd int) string {
+	start := matchStart - 30
+	if start < 0 {
+		start = 0
+	}
+	end := matchEnd + 30
+	if end > len(line) {
+		end = len(line)
+	}
+	ctx := line[start:end]
+	if start > 0 {
+		ctx = "..." + ctx
+	}
+	if end < len(line) {
+		ctx = ctx + "..."
+	}
+	return ctx
+}
+
+func extractOutLinks(content string) (wiki, md []LinkOcc) {
+	lines := strings.Split(content, "\n")
+	for lineNum, line := range lines {
+		num := lineNum + 1
+		for _, match := range wikilinkRe.FindAllStringSubmatchIndex(line, -1) {
+			target := strings.TrimSpace(line[match[2]:match[3]])
+			if idx := strings.Index(target, "#"); idx != -1 {
+				target = strings.TrimSpace(target[:idx])
+			}
+			if target == "" {
+				continue
+			}
+			wiki = append(wiki, LinkOcc{
+				Target:  target,
+				Line:    num,
+				Type:    "wikilink",
+				Context: linkContext(line, match[0], match[1]),
+			})
+		}
+
+		for _, match := range mdlinkRe.FindAllStringSubmatchIndex(line, -1) {
+			rawTarget := strings.TrimSpace(line[match[4]:match[5]])
+			if isExternalOrFragmentLink(rawTarget) || strings.Split(rawTarget, "#")[0] == "" {
+				continue
+			}
+			md = append(md, LinkOcc{
+				Target:  rawTarget,
+				Line:    num,
+				Type:    "markdown",
+				Context: linkContext(line, match[0], match[1]),
+			})
+		}
+	}
+	return wiki, md
+}
+
 func buildBacklinkIndex(notes []NoteRecord, links func(string) ([]LinkOcc, []LinkOcc)) *backlinkIndex {
 	idx := &backlinkIndex{
 		wiki:  make(map[string][]int32),

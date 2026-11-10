@@ -23,6 +23,19 @@ function hasHeader(headers, name) {
     return Object.keys(headers).some((key) => key.toLowerCase() === name);
 }
 
+function buildRequestInit({ method = 'GET', json, body, headers, signal } = {}) {
+    const init = { method, signal, headers: { ...(headers || {}) } };
+    if (json !== undefined) {
+        init.body = JSON.stringify(json);
+        if (!hasHeader(init.headers, 'content-type')) {
+            init.headers['Content-Type'] = 'application/json';
+        }
+    } else if (body !== undefined) {
+        init.body = body;
+    }
+    return init;
+}
+
 async function errorFromResponse(response, path) {
     let body = null;
     try {
@@ -51,17 +64,7 @@ async function errorFromResponse(response, path) {
  * @returns {Promise<Response>}
  */
 export async function request(path, { method = 'GET', json, body, headers, signal } = {}) {
-    const init = { method, signal, headers: { ...(headers || {}) } };
-    if (json !== undefined) {
-        init.body = JSON.stringify(json);
-        if (!hasHeader(init.headers, 'content-type')) {
-            init.headers['Content-Type'] = 'application/json';
-        }
-    } else if (body !== undefined) {
-        init.body = body;
-    }
-
-    const response = await fetch(path, init);
+    const response = await fetch(path, buildRequestInit({ method, json, body, headers, signal }));
     if (!response.ok) {
         throw await errorFromResponse(response, path);
     }
@@ -118,15 +121,5 @@ export function send(path, method, payload, options = {}) {
  * Never throws on non-2xx.
  */
 export function raw(path, options = {}) {
-    const { method = 'GET', json, body, headers, signal } = options;
-    const init = { method, signal, headers: { ...(headers || {}) } };
-    if (json !== undefined) {
-        init.body = JSON.stringify(json);
-        if (!hasHeader(init.headers, 'content-type')) {
-            init.headers['Content-Type'] = 'application/json';
-        }
-    } else if (body !== undefined) {
-        init.body = body;
-    }
-    return fetch(path, init);
+    return fetch(path, buildRequestInit(options));
 }

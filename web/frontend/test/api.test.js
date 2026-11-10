@@ -165,6 +165,26 @@ test('raw never throws on non-2xx so callers can inspect the status', async () =
     }
 });
 
+test('raw and request prepare the same method, headers, body, and signal', async () => {
+    const stub = stubFetch(() => jsonResponse(200, {}));
+    const signal = new AbortController().signal;
+    const options = {
+        method: 'PATCH',
+        json: { value: 1 },
+        headers: { authorization: 'Bearer test', 'content-type': 'application/custom+json' },
+        signal,
+    };
+    try {
+        await api.request('/api/request', options);
+        await api.raw('/api/raw', options);
+        assert.deepEqual(stub.calls[0].init, stub.calls[1].init);
+        assert.equal(stub.calls[0].init.signal, signal);
+        assert.equal(stub.calls[1].init.body, JSON.stringify(options.json));
+    } finally {
+        stub.restore();
+    }
+});
+
 test('send resolves with the response for fire-and-forget writes', async () => {
     const stub = stubFetch(() => jsonResponse(200, ''));
     try {
