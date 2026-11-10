@@ -62,13 +62,28 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                                 </svg>
                             </button>
-                            <span data-testid="offline-status" x-show="!isOnline" class="text-xs" style="color: var(--warning, #eab308);" :title="t('offline.status_hint')" x-text="t('offline.status')"></span>
-                            <span data-testid="offline-syncing" x-show="isOnline && syncingOfflineSaves" class="text-xs" style="color: var(--text-secondary);" x-text="t('offline.syncing')"></span>
-                            <span data-testid="offline-pending" x-show="isOnline && pendingSaveCount > 0 && !syncingOfflineSaves" class="text-xs" style="color: var(--text-secondary);" :title="t('offline.pending_hint')" x-text="t('offline.pending', { count: pendingSaveCount })"></span>
-                            <span data-testid="cached-note" x-show="noteFromCache" class="text-xs hidden md:inline" style="color: var(--text-tertiary);" :title="t('offline.cached_hint')" x-text="t('offline.cached')"></span>
-                            <span data-testid="saving" x-show="isSaving" class="text-xs" style="color: var(--text-secondary);" x-text="t('common.saving')"></span>
-                            <span data-testid="saved" x-show="!isSaving && lastSaved" class="text-xs" style="color: var(--success);" x-text="t('common.saved')"></span>
-                            <span x-show="!isSaving && !lastSaved && lastEditedText" class="text-xs hidden md:inline" style="color: var(--text-tertiary);" x-text="t('editor.edited', {time: lastEditedText})"></span>
+                            <!-- Status bar: mutually exclusive states, highest priority first -->
+                            <template x-if="!isOnline">
+                                <span data-testid="offline-status" class="text-xs" style="color: var(--warning, #eab308);" :title="t('offline.status_hint')" x-text="t('offline.status')"></span>
+                            </template>
+                            <template x-else-if="isOnline && syncingOfflineSaves">
+                                <span data-testid="offline-syncing" class="text-xs" style="color: var(--text-secondary);" x-text="t('offline.syncing')"></span>
+                            </template>
+                            <template x-else-if="isOnline && pendingSaveCount > 0">
+                                <span data-testid="offline-pending" class="text-xs" style="color: var(--text-secondary);" :title="t('offline.pending_hint')" x-text="t('offline.pending', { count: pendingSaveCount })"></span>
+                            </template>
+                            <template x-else-if="noteFromCache">
+                                <span data-testid="cached-note" class="text-xs hidden md:inline" style="color: var(--text-tertiary);" :title="t('offline.cached_hint')" x-text="t('offline.cached')"></span>
+                            </template>
+                            <template x-else-if="isSaving">
+                                <span data-testid="saving" class="text-xs" style="color: var(--text-secondary);" x-text="t('common.saving')"></span>
+                            </template>
+                            <template x-else-if="lastSaved">
+                                <span data-testid="saved" class="text-xs" style="color: var(--success);" x-text="t('common.saved')"></span>
+                            </template>
+                            <template x-else-if="lastEditedText">
+                                <span class="text-xs hidden md:inline" style="color: var(--text-tertiary);" x-text="t('editor.edited', {time: lastEditedText})"></span>
+                            </template>
                         </div>
                         
                         <!-- Demo Mode Warning Banner -->
