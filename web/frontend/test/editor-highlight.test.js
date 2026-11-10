@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createPreview } from '../src/app/preview.js';
+import { createEditor } from '../src/app/editor.js';
 
 const escapeHtml = (text) => text
     .replace(/&/g, '&amp;')
@@ -31,8 +31,8 @@ function withHighlighter(highlighter, run) {
     }
 }
 
-function makePreview() {
-    return Object.assign(createPreview(), { escapeHtml });
+function makeEditor() {
+    return Object.assign(createEditor(), { escapeHtml });
 }
 
 test('highlights supported fenced languages while preserving overlay text', () => {
@@ -45,7 +45,7 @@ test('highlights supported fenced languages while preserving overlay text', () =
         },
     }, () => {
         const source = '```js\nconst value = "<tag>";\n```';
-        const html = makePreview().highlightMarkdown(source);
+        const html = makeEditor().highlightMarkdown(source);
 
         assert.deepEqual(calls, [{ language: 'js', ignoreIllegals: true }]);
         assert.match(html, /class="md-codeblock hljs"/);
@@ -62,7 +62,7 @@ test('leaves unknown-language blocks unhighlighted and safely escaped', () => {
         },
     }, () => {
         const source = '```made-up\n<script>alert(1)</script>\n```';
-        const html = makePreview().highlightMarkdown(source);
+        const html = makeEditor().highlightMarkdown(source);
 
         assert.match(html, /class="md-codeblock"/);
         assert.doesNotMatch(html, /class="md-codeblock hljs"/);
@@ -77,7 +77,7 @@ test('highlights an unfinished code fence without applying Markdown formatting',
         highlight: (code) => ({ value: escapeHtml(code) }),
     }, () => {
         const source = '```js\n**not bold**';
-        const html = makePreview().highlightMarkdown(source);
+        const html = makeEditor().highlightMarkdown(source);
 
         assert.match(html, /class="md-codeblock hljs"/);
         assert.doesNotMatch(html, /class="md-bold"/);

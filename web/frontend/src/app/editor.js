@@ -4,6 +4,8 @@
 // this factory's object with the other feature slices (see compose()).
 
 import { applyEditorIndent, applyEditorOutdent, applyMarkdownWrap, editorKeyChar } from '../lib/editor.js';
+import { highlightMarkdownOverlay } from '../lib/editor-highlight.js';
+import { loadHighlightJs } from '../lib/highlight.js';
 
 // Delimiters that wrap an active selection when typed directly in the editor.
 // Typing "*" then "*" therefore nests into "**bold**" while the selection stays
@@ -220,7 +222,7 @@ export function createEditor() {
             this.syntaxHighlightTimeout = setTimeout(async () => {
                 if (!globalThis.hljs && /^[ \t]{0,3}`{3,}/m.test(this.noteContent)) {
                     try {
-                        await this.loadHighlightJs();
+                        await loadHighlightJs();
                     } catch (error) {
                         console.error('Highlight.js failed to load:', error);
                         return;
@@ -231,6 +233,13 @@ export function createEditor() {
                     overlay.innerHTML = this.highlightMarkdown(this.noteContent);
                 }
             }, 50); // 50ms debounce
+        },
+
+        highlightMarkdown(text) {
+            return highlightMarkdownOverlay(text, {
+                escapeHtml: this.escapeHtml.bind(this),
+                highlighter: globalThis.hljs,
+            });
         },
         
         // Mark that we have pending changes (called on each keystroke)

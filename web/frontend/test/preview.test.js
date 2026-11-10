@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { createEditor } from '../src/app/editor.js';
 import { createPreview } from '../src/app/preview.js';
 import { createPreviewDiagrams } from '../src/app/preview-diagrams.js';
 
@@ -53,7 +54,7 @@ test('query fences keep their syntax overlay without the code-block background c
         },
     };
     try {
-        const preview = Object.assign(createPreview(), {
+        const preview = Object.assign(createEditor(), {
             escapeHtml: (text) => text.replace(/</g, '&lt;').replace(/>/g, '&gt;'),
         });
         const html = preview.highlightMarkdown('```query\ntype: table\n```');
@@ -180,6 +181,34 @@ test('Markmap rendering is debounced while note content changes', () => {
         const preview = Object.assign(createPreview(), {
             noteContent: '---\nnote-type: markmap\n---\n# First',
             renderMarkmap() { renderCount++; },
+        });
+
+        test('preview post-processing delegates code and media work to its feature slice', () => {
+            const originalSetTimeout = globalThis.setTimeout;
+            const scheduled = [];
+            let codePostProcessingCount = 0;
+            globalThis.setTimeout = (callback, delay) => {
+                scheduled.push({ callback, delay });
+                return scheduled.length;
+            };
+
+            try {
+                const preview = Object.assign(createPreview(), {
+                    noteContent: '# Note',
+                    typesetMath() {},
+                    renderMermaid() {},
+                    schedulePreviewCodePostProcessing() {
+                        codePostProcessingCount++;
+                    },
+                });
+
+                preview.schedulePreviewPostProcessing();
+
+                assert.equal(codePostProcessingCount, 1);
+                assert.equal(scheduled.length, 2);
+            } finally {
+                globalThis.setTimeout = originalSetTimeout;
+            }
         });
 
         preview.schedulePreviewPostProcessing();
