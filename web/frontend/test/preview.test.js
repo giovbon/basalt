@@ -2,8 +2,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createEditor } from '../src/app/editor.js';
+import { createLinkPreview } from '../src/app/link-preview.js';
 import { createPreview } from '../src/app/preview.js';
 import { createPreviewDiagrams } from '../src/app/preview-diagrams.js';
+
+test('link preview includes the full note content beyond the previous excerpt limits', () => {
+    const preview = createLinkPreview();
+    const content = Array.from({ length: 120 }, (_, index) =>
+        `Line ${index + 1}: ${'content '.repeat(8)}`
+    ).join('\n');
+
+    const excerpt = preview._linkPreviewExcerpt(content, [], '');
+
+    assert.ok(excerpt.length > 6000);
+    assert.match(excerpt, /Line 120:/);
+    assert.doesNotMatch(excerpt, /…$/);
+});
 
 test('diagram theme follows the selected theme metadata and legacy fallback', () => {
     const diagrams = Object.assign(createPreviewDiagrams(), {

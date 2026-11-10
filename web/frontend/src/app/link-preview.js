@@ -284,13 +284,7 @@ export function createLinkPreview() {
                 excerptLines = lines.slice(contentStart, contentStart + 40);
             }
 
-            const maxLines = 80;
-            let excerpt = excerptLines.slice(0, maxLines).join('\n').trim();
-            if (excerptLines.length > maxLines) excerpt += '\n\n…';
-
-            const maxChars = 6000;
-            if (excerpt.length > maxChars) excerpt = excerpt.slice(0, maxChars).trimEnd() + '…';
-            return excerpt;
+            return excerptLines.join('\n').trim();
         },
 
         _buildLinkPreviewHTML(data, anchor) {

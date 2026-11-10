@@ -888,32 +888,37 @@
         /* Scrollbar styling */
         .custom-scrollbar::-webkit-scrollbar,
         .editor-textarea::-webkit-scrollbar,
-        .markdown-preview::-webkit-scrollbar {
+        .markdown-preview::-webkit-scrollbar,
+        .link-preview-card::-webkit-scrollbar {
             width: 12px;
             height: 12px;
         }
         .custom-scrollbar::-webkit-scrollbar-track,
         .editor-textarea::-webkit-scrollbar-track,
-        .markdown-preview::-webkit-scrollbar-track {
+        .markdown-preview::-webkit-scrollbar-track,
+        .link-preview-card::-webkit-scrollbar-track {
             background: var(--bg-tertiary);
         }
         .custom-scrollbar::-webkit-scrollbar-thumb,
         .editor-textarea::-webkit-scrollbar-thumb,
-        .markdown-preview::-webkit-scrollbar-thumb {
+        .markdown-preview::-webkit-scrollbar-thumb,
+        .link-preview-card::-webkit-scrollbar-thumb {
             background: var(--border-secondary);
             border-radius: 6px;
             border: 2px solid var(--bg-tertiary);
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover,
         .editor-textarea::-webkit-scrollbar-thumb:hover,
-        .markdown-preview::-webkit-scrollbar-thumb:hover {
+        .markdown-preview::-webkit-scrollbar-thumb:hover,
+        .link-preview-card::-webkit-scrollbar-thumb:hover {
             background: var(--text-tertiary);
         }
         
         /* Firefox scrollbar */
         .custom-scrollbar,
         .editor-textarea,
-        .markdown-preview {
+        .markdown-preview,
+        .link-preview-card {
             scrollbar-width: thin;
             scrollbar-color: var(--border-secondary) var(--bg-tertiary);
         }
