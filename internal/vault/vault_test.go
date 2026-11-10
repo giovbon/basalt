@@ -74,6 +74,63 @@ func TestMoveNoteUpdatesWikilinksToRenamedNote(t *testing.T) {
 	}
 }
 
+func TestMoveNoteRefreshesListingAndPersistedIndex(t *testing.T) {
+	dir := t.TempDir()
+	indexPath := filepath.Join(t.TempDir(), ".basalt-index.gob")
+	v := New(dir)
+	if err := v.StartIndexPersistence(indexPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.SaveNote("folder/old.md", "# Target\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.SaveNote("source.md", "See [[folder/old]].\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := v.ScanNotes(false); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := v.MoveNote("folder/old.md", "moved/new.md"); err != nil {
+		t.Fatal(err)
+	}
+	notes, _, err := v.ScanNotes(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := notePaths(notes)
+	if hasPath(paths, "folder/old.md") || !hasPath(paths, "moved/new.md") {
+		t.Fatalf("listing after move = %v, want moved/new.md and no folder/old.md", paths)
+	}
+	got, err := v.GetNoteContent("source.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "See [[moved/new]].\n" {
+		t.Errorf("source after move = %q, want updated wikilink", got)
+	}
+	if err := v.SaveIndexNow(); err != nil {
+		t.Fatal(err)
+	}
+	v.Close()
+
+	restored := New(dir)
+	if err := restored.StartIndexPersistence(indexPath); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(restored.Close)
+	if got := restored.GetBacklinks("moved/new.md"); len(got) != 1 || got[0].Path != "source.md" {
+		t.Errorf("restored backlinks = %+v, want source.md", got)
+	}
+	restored.idx.mu.RLock()
+	_, oldEntryExists := restored.idx.entries["folder/old.md"]
+	_, newEntryExists := restored.idx.entries["moved/new.md"]
+	restored.idx.mu.RUnlock()
+	if oldEntryExists || !newEntryExists {
+		t.Errorf("restored index old path exists = %v, new path exists = %v", oldEntryExists, newEntryExists)
+	}
+}
+
 func TestMoveNoteRollsBackWhenLinkWriteFails(t *testing.T) {
 	dir := t.TempDir()
 	v := New(dir)

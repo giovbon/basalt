@@ -142,6 +142,100 @@ func TestIndexPersistenceRoundTrip(t *testing.T) {
 	}
 }
 
+func TestIndexPersistenceReconcilesExternalChanges(t *testing.T) {
+	dir := t.TempDir()
+	indexPath := filepath.Join(t.TempDir(), ".basalt-index.gob")
+
+	for path, content := range map[string]string{
+		"source.md":     "---\ntags: [old]\n---\n[[old-target]]\n",
+		"old-target.md": "old target\n",
+		"removed.md":    "remove me\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, path), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	v1 := New(dir)
+	if err := v1.StartIndexPersistence(indexPath); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := v1.ScanNotes(false); err != nil {
+		t.Fatal(err)
+	}
+	if err := v1.SaveIndexNow(); err != nil {
+		t.Fatal(err)
+	}
+	v1.Close()
+
+	updatedSource := "---\ntags: [fresh]\n---\n[[new-target]]\n"
+	if err := os.WriteFile(filepath.Join(dir, "source.md"), []byte(updatedSource), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(dir, "old-target.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(dir, "removed.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "new-target.md"), []byte("new target\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	v2 := New(dir)
+	if err := v2.StartIndexPersistence(indexPath); err != nil {
+		t.Fatalf("loading previous index: %v", err)
+	}
+	t.Cleanup(v2.Close)
+
+	notes, _, err := v2.ScanNotes(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := notePaths(notes)
+	for _, path := range []string{"source.md", "new-target.md"} {
+		if !hasPath(paths, path) {
+			t.Errorf("listing = %v, missing %q", paths, path)
+		}
+	}
+	for _, path := range []string{"old-target.md", "removed.md"} {
+		if hasPath(paths, path) {
+			t.Errorf("listing still contains removed path %q: %v", path, paths)
+		}
+	}
+	for _, note := range notes {
+		if note.Path == "source.md" && (len(note.Tags) != 1 || note.Tags[0] != "fresh") {
+			t.Errorf("source tags = %v, want [fresh]", note.Tags)
+		}
+	}
+
+	if got := v2.GetBacklinks("new-target.md"); len(got) != 1 || got[0].Path != "source.md" {
+		t.Errorf("new-target backlinks = %+v, want source.md", got)
+	}
+	if got := v2.GetBacklinks("old-target.md"); len(got) != 0 {
+		t.Errorf("old-target backlinks = %+v, want none", got)
+	}
+
+	if err := v2.SaveIndexNow(); err != nil {
+		t.Fatal(err)
+	}
+	persisted := readIndexFile(t, indexPath)
+	persistedPaths := make(map[string]struct{}, len(persisted.Entries))
+	for _, entry := range persisted.Entries {
+		persistedPaths[entry.Rel] = struct{}{}
+	}
+	for _, path := range []string{"source.md", "new-target.md"} {
+		if _, ok := persistedPaths[path]; !ok {
+			t.Errorf("persisted index is missing %q: %v", path, persistedPaths)
+		}
+	}
+	for _, path := range []string{"old-target.md", "removed.md"} {
+		if _, ok := persistedPaths[path]; ok {
+			t.Errorf("persisted index still contains %q: %v", path, persistedPaths)
+		}
+	}
+}
+
 // TestIndexPersistenceFlushesOnlyWhenDirty pins the write policy: a clean
 // index writes nothing, a mutated one writes on demand, and the file carries
 // version + absolute vault path for validation on load.

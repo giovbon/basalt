@@ -179,6 +179,11 @@ os arquivos gerados** — depois de instalar as dependências frontend e mexer e
 (cd web/frontend && npm test)
 ```
 
+Os métodos de configuração do Alpine são compostos a partir de fatias focadas:
+inicialização em `src/app/bootstrap.js`, preferências em
+`src/app/local-settings.js`, temas em `src/app/theme-settings.js` e traduções e
+notificações em `src/app/localization.js`.
+
 Para medir listagem e busca em vaults de 100, 1.000 e 10.000 notas:
 
 ```bash

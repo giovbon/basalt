@@ -1,4 +1,4 @@
-name: Build and Push Docker Image
+name: CI and Docker publish
 
 on:
   push:
@@ -7,6 +7,10 @@ on:
       - master
     tags:
       - 'v*.*.*'
+  pull_request:
+    branches:
+      - main
+      - master
   workflow_dispatch:
 
 jobs:
@@ -56,6 +60,7 @@ jobs:
 
   build-and-push:
     needs: test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
 
     steps:
