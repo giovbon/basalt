@@ -71,6 +71,20 @@ export function createState() {
         isSaving: false,
         lastSaved: false,
         noteBaseHash: null,        // Fingerprint of the current note as last read or written on disk
+
+        // Single status shown in the editor toolbar. Alpine 3 has no x-else-if,
+        // so the priority order lives here instead of in a template chain.
+        get editorStatus() {
+            if (!this.isOnline) return 'offline';
+            if (this.syncingOfflineSaves) return 'syncing';
+            if (this.pendingSaveCount > 0) return 'pending';
+            if (this.noteFromCache) return 'cached';
+            if (this.isSaving) return 'saving';
+            if (this.lastSaved) return 'saved';
+            if (this.lastEditedText) return 'edited';
+            return '';
+        },
+
         _saveControllerInstance: null, // lib/save-controller.js, created on first save
 
         // Offline cache and outbox (lib/offline-store.js). The store and its
