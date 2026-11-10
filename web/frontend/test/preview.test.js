@@ -2,6 +2,38 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createPreview } from '../src/app/preview.js';
+import { createPreviewDiagrams } from '../src/app/preview-diagrams.js';
+
+test('diagram theme follows the selected theme metadata and legacy fallback', () => {
+    const diagrams = Object.assign(createPreviewDiagrams(), {
+        currentTheme: 'paper',
+        availableThemes: [{ id: 'paper', type: 'light' }],
+    });
+    assert.equal(diagrams.getThemeType(), 'light');
+
+    diagrams.currentTheme = 'vs-blue';
+    diagrams.availableThemes = [];
+    assert.equal(diagrams.getThemeType(), 'light');
+
+    diagrams.currentTheme = 'unknown';
+    assert.equal(diagrams.getThemeType(), 'dark');
+});
+
+test('diagram theme follows the system color preference', () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        matchMedia: () => ({ matches: true }),
+    };
+    try {
+        const diagrams = Object.assign(createPreviewDiagrams(), {
+            currentTheme: 'system',
+        });
+        assert.equal(diagrams.getThemeType(), 'dark');
+    } finally {
+        if (originalWindow === undefined) delete globalThis.window;
+        else globalThis.window = originalWindow;
+    }
+});
 
 test('renderedMarkdown returns the cached HTML without reading live note content', () => {
     const preview = Object.assign(createPreview(), {

@@ -14,6 +14,7 @@ import { createBootstrap } from './app/bootstrap.js';
 import { createNotes } from './app/notes.js';
 import { createFolders } from './app/folders.js';
 import { createPreview } from './app/preview.js';
+import { createPreviewDiagrams } from './app/preview-diagrams.js';
 import { createPreviewTasks } from './app/preview-tasks.js';
 import { createGraph } from './app/graph.js';
 import { createEditor } from './app/editor.js';
@@ -48,6 +49,7 @@ function noteApp() {
         createNotes(),
         createFolders(),
         createPreview(),
+        createPreviewDiagrams(),
         createPreviewTasks(),
         createGraph(),
         createEditor(),
